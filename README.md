@@ -83,6 +83,7 @@ when the app is not running.
   mounted and the log says so.
 - **Remove** asks first. A mounted share stays mounted until it is ejected in Finder.
 - **Save** writes the configuration and runs a check right away
+- The window is as tall as the shares need, up to four; with more, the list scrolls.
 - **Log**: the latest entries, newest first. Hidden by default; show and hide it via
   *View → Show Log* (⌘L). The app remembers the setting.
 - **Checks while editing**: the app resolves the server name, shows the IP address and

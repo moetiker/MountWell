@@ -589,7 +589,19 @@ struct ContentView: View {
     @State private var editing: Share?
     @State private var editingIsNew = false
     @State private var deleting: Share?
+    @State private var contentHeight: CGFloat = 0
+    @State private var cardHeight: CGFloat = 78
     @AppStorage("showLog") private var showLog = false
+
+    // up to this many shares the list grows with them, beyond that it scrolls
+    private let visibleShares = 4
+
+    // height of the share list: all of its content up to visibleShares cards, then fixed
+    private var listHeight: CGFloat {
+        let n = m.shares.count
+        if n <= visibleShares { return contentHeight }
+        return CGFloat(visibleShares) * cardHeight + CGFloat(visibleShares - 1) * 10 + 4
+    }
     @Environment(\.openWindow) private var openWindow
 
     private var subtitle: String {
@@ -627,13 +639,17 @@ struct ContentView: View {
                                 onEject: { m.eject(share) },
                                 onMount: { m.mount(share) }
                             )
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardHeight = $0 }
                         }
                     }
                     .padding(2)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                     .animation(.smooth, value: m.shares)
                 }
             }
             .scrollContentBackground(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: listHeight)
 
             if showLog {
                 LogPanel(lines: m.log) { showLog = false }
@@ -644,7 +660,7 @@ struct ContentView: View {
         }
         .animation(.spring(duration: 0.35, bounce: 0.15), value: showLog)
         .padding(16)
-        .frame(minWidth: 640, minHeight: 420)
+        .frame(minWidth: 640)
         .background { Backdrop() }
         .navigationTitle("Mountwell")
         .navigationSubtitle(subtitle)
@@ -1095,7 +1111,7 @@ struct MountwellApp: App {
         Window("Mountwell", id: "main") {
             ContentView(m: m)
         }
-        .windowResizability(.contentMinSize)
+        .windowResizability(.contentSize)   // height follows the share list, see ContentView.listHeight
         .windowToolbarStyle(.unified)
         .commands { AppCommands() }
 

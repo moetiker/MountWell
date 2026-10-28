@@ -134,6 +134,11 @@ symptom so it can be checked later whether it still applies.
   keystroke; a 500 ms delay avoids one DNS lookup per character.
 - The "Automatic" switch in the toolbar uses `.controlSize(.mini)`; the regular switch
   looked oversized next to the toolbar buttons.
+- The main window has no fixed height. The share list measures its content and its
+  first card with `onGeometryChange` and takes exactly that height up to 4 shares
+  (`visibleShares`); with more it stays at 4 cards and scrolls. The window uses
+  `.windowResizability(.contentSize)`, so it grows and shrinks with the list and the log
+  panel. `onGeometryChange` is back-deployed to macOS 13 and builds for macOS 14.
 - The help window is opened with `openWindow(id:)`. The environment is not directly
   available in `.commands`, so the menu lives in its own `Commands` struct with
   `@Environment(\.openWindow)`.
