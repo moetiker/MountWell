@@ -13,12 +13,13 @@ notes before changing the build, the package scripts or the mount script.
 
 ```sh
 tests/run.sh          # all tests, takes seconds
-./build.sh            # tests, then build/Mountwell-0.0.1.pkg
+./build.sh            # tests, then build/Mountwell-<version from VERSION>.pkg
 VERSION=0.0.9 ./build.sh
+tools/screenshot.sh   # renders docs/screenshot.png with example shares
 ```
 
-Install a local build with `open build/Mountwell-<version>.pkg`. Local builds default to
-version 0.0.1, so an installed local build always offers the latest release as update.
+Install a local build with `open build/Mountwell-<version>.pkg`. A local build carries the
+version of the latest release, so the app does not offer that release as an update.
 
 ## Architecture
 
@@ -108,11 +109,13 @@ click through every screen you touched.
 
 ## Workflow
 
-1. Branch from `main`, or commit directly for small changes.
+1. Branch from `main`; `main` is protected and takes pull requests only.
 2. Change code, tests, translation and docs together: spec for behaviour, README for
    users, maintainer notes for non-obvious reasons and pitfalls.
 3. `tests/run.sh` and `./build.sh` must pass. CI runs the same on every pull request and
-   push to `main`.
+   push to `main`; the pull request merges once `ci-passed` and `changelog-updated` are
+   green. Add an entry to `CHANGES.md`, or the label `no-changelog` at creation for a
+   change users do not notice (`gh pr create --label no-changelog`).
 4. Commit messages: English, imperative subject line under ~70 characters, body explains
    why.
 5. Never commit internal host names, IP addresses, user names or anything else about a
@@ -120,15 +123,18 @@ click through every screen you touched.
 
 ## Releasing
 
-1. Make sure `main` is green in GitHub Actions.
-2. Tag and push: `git tag v0.0.3 && git push origin v0.0.3`. The version comes only from
-   the tag (spec B-3).
-3. The workflow builds and publishes the release with the package. Installed apps offer
-   it within 24 hours or at their next launch.
-4. Check the release notes on GitHub; they appear in the update dialog (see spec Q-1).
+1. Every user-visible change has its entry under `[Unreleased]` in `CHANGES.md`
+   (`### New`, `### Changed`, `### Fixed`; never `### Added`, the release ignores it).
+2. In GitHub Actions run **Create release PR** and pick bugfix, feature or major. It
+   builds and tests the release branch and opens the release pull request.
+3. Merge that pull request. Publishing tags it and makes the release public with
+   `Mountwell-<version>.pkg`; installed apps offer it within 24 hours or at their next
+   launch.
 
-Versions are numeric `major.minor.patch`; `isNewer` compares them component by component.
-Never reuse or move a published tag: installed apps may already have seen it.
+The version lives in `VERSION` and only the release changes it. Versions are numeric
+`major.minor.patch`; `isNewer` compares them component by component. Never move or
+reuse a published tag: installed apps may already have seen it. A failed publish is
+re-run from the Actions page (**Re-run failed jobs**), never dispatched again.
 
 ## Things that are easy to break
 
@@ -138,6 +144,8 @@ Never reuse or move a published tag: installed apps may already have seen it.
   and the uninstaller. Change them everywhere or nowhere.
 - **The mount table match** (`mountPoint(of:in:)` and `mountpoint_of`) must stay
   equivalent in Swift and bash.
+- **The screenshot** shows example shares only. Regenerate it with `tools/screenshot.sh`
+  after a visible change; never replace it with a capture of a real configuration.
 - **`Info.plist` placeholders** `@VERSION@` and `@REPO@` are filled in by `build.sh`.
 - **Window sizing**: the main window follows its content (`.contentSize`). Anything with
   an unbounded height in `ContentView` makes the window grow without limit.

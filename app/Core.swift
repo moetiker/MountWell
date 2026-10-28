@@ -196,3 +196,15 @@ func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
     }
     return nil
 }
+
+// Release notes for a plain-text alert: "### Fixed" → "Fixed:", without `code` and **bold** marks
+func plainNotes(_ markdown: String) -> String {
+    markdown.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+        var l = String(line)
+        if l.hasPrefix("#") {
+            l = l.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+            if !l.isEmpty { l += ":" }
+        }
+        return l.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+    }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+}

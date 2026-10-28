@@ -37,7 +37,7 @@ symptom so it can be checked later whether it still applies.
 
 ## Build environment
 
-- With stale headers in `/usr/local/include` (e.g. `stdbool.h`, `Block.h`), `swiftc`
+- With stale headers in `/usr/local/include` (for example `stdbool.h`, `Block.h`), `swiftc`
   without an explicit SDK fails with `#include nested too deeply` and
   `could not build Objective-C module 'Accessibility'`. `build.sh` and `tests/run.sh`
   therefore set `SDKROOT`. `swiftc -sdk` alone is not enough: `swift app/make-icon.swift`
@@ -67,7 +67,7 @@ symptom so it can be checked later whether it still applies.
   LaunchServices already knows a copy with the same bundle ID. After a build exactly such
   a copy sits in `build/root/Applications/`, and the LaunchAgent points to
   `/Applications/Mountwell.app`.
-- Files carrying the `com.apple.provenance` attribute (created e.g. when building from
+- Files carrying the `com.apple.provenance` attribute (created for example when building from
   inside a sandbox) keep it through `xattr -cr`, and `pkgbuild` adds `._` entries for
   them to the package. Built from a normal Terminal, they do not appear.
 - Without a Developer ID certificate (`security find-identity -v -p basic`) the package
@@ -176,17 +176,37 @@ symptom so it can be checked later whether it still applies.
 - The About text comes via `orderFrontStandardAboutPanel` with `.credits`, the copyright
   line from `NSHumanReadableCopyright` in `app/Info.plist`.
 
-## GitHub Actions
+## GitHub Actions and releases
 
-- The runner is `macos-26`: the Liquid Glass APIs need the macOS 26 SDK. The runner is
+- The setup follows the repo-infra standard. No piece builds Swift, so the tests and
+  the package run in the project's own `ci-local.yml` and `release-build-local.yml`
+  (the owner chose these over teaching the standard a Swift piece). The release flow,
+  the changelog gate and the ruleset are the standard's.
+- The runners are `macos-26`: the Liquid Glass APIs need the macOS 26 SDK. They are
   Apple silicon; the Intel half of the Universal app is cross-compiled with
   `-target x86_64-apple-macos14.0`, as locally.
 - The icon is drawn with AppKit on the runner; that works without a display because it
   renders into an `NSBitmapImageRep`.
-- Releases are published by the workflow with the job's `GITHUB_TOKEN`
-  (`contents: write`) via `gh release create --verify-tag`. Only tags matching `v*`
-  trigger it. The version comes from the tag, so tag and app version cannot diverge.
-- Non-release builds use version `0.0.0`; `isNewer` treats every release as newer.
+- The version lives in `VERSION`, listed in `version_files` of `.github/repo-infra.json`.
+  `build.sh` reads it unless `VERSION` is set in the environment, which
+  `release-build-local.yml` does with the version of the release.
+- A first attempt released on every pushed tag `v*` with `gh release create
+  --generate-notes`. Without pull requests the generated notes held only a link to the
+  comparison, and the update dialog showed it as raw Markdown. The release notes now come
+  from `CHANGES.md`, and `plainNotes` strips the Markdown marks for the dialog.
+- `exceptions` in `.github/repo-infra.json` records why there are no Linux packages and
+  no Homebrew formula.
+
+## Screenshot
+
+- `docs/screenshot.png` is rendered by `tools/screenshot.sh`: the real `ContentView`
+  with a `Model(live: false)` holding example shares on `example.com`, so the picture
+  never shows a real server or user. `-D SCREENSHOT` leaves out the app's `@main`.
+- Liquid Glass is drawn by the window server and is missing from an offscreen capture
+  (`cacheDisplay`); the cards came out without a background. In `SCREENSHOT` builds
+  `glassCard` uses a light fill instead.
+- A capture of the real window (`screencapture -l`) needs the Screen Recording
+  permission and would show the real configuration.
 
 ## Tests
 

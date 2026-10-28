@@ -1,0 +1,40 @@
+name: Release build (macOS)
+
+# Builds Mountwell-<version>.pkg for the release, called from release-build.yml.
+# The package is the release asset the app's updater downloads.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version being released.
+        type: string
+        required: true
+      ref:
+        description: The release branch head to build.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build the package
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Test and build
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./build.sh
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-asset-pkg
+          path: build/Mountwell-${{ inputs.version }}.pkg
+          if-no-files-found: error

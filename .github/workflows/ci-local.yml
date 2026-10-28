@@ -1,0 +1,42 @@
+name: CI (macOS)
+
+# Mountwell's own CI job, called from ci.yml. Runs the tests and builds the
+# Universal app and the package with build.sh, the same as on a developer Mac.
+# The macOS 26 SDK (Xcode 26) is needed for the Liquid Glass APIs.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to test; empty takes the commit that triggered the run.
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test and build
+        run: ./build.sh
+
+      # Not a release asset: only release-build-local.yml uploads those.
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mountwell-package
+          path: build/Mountwell-*.pkg
+          if-no-files-found: error

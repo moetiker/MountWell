@@ -1,7 +1,7 @@
 # Mountwell specification
 
 What Mountwell must do. Requirements are numbered so issues, commits and tests can refer
-to them (e.g. "M-4"). The reasons behind individual decisions are in
+to them (for example "M-4"). The reasons behind individual decisions are in
 `docs/maintainer-notes.md`; how to work on the code is in `docs/programming-guide.md`.
 
 ## 1. Purpose
@@ -131,11 +131,19 @@ that are only reachable in certain networks.
 
 - **B-1** `./build.sh` runs all tests and, only if they pass, builds the Universal app and
   the package. `VERSION` and `REPO` can be set from the environment.
-- **B-2** GitHub Actions (`.github/workflows/build.yml`, macOS 26 runner) tests and builds
-  every pull request and every push to `main` and attaches the package to the run. These
-  builds have version `0.0.0`.
-- **B-3** Pushing a tag `v<version>` builds that version and publishes the GitHub release
-  with the package. The version comes only from the tag.
+- **B-2** GitHub Actions tests and builds every pull request and every push to `main` on a
+  macOS 26 runner (`ci.yml` calling `ci-local.yml`) and attaches the package to the run.
+  The required check `ci-passed` sums it up.
+- **B-3** A release starts with the workflow *Create release PR* (bugfix, feature or
+  major). It takes the next version from the tags, moves the `[Unreleased]` section of
+  `CHANGES.md` under that version, writes it to `VERSION`, builds and tests the release
+  branch and opens a pull request. Merging it tags the release and publishes it on GitHub
+  with the package; the `CHANGES.md` section is the release notes.
+- **B-6** `main` is protected: changes land through pull requests with a green
+  `ci-passed` and an entry in `CHANGES.md` (`changelog-updated`), or the label
+  `no-changelog` for changes users do not notice.
+- **B-7** The setup follows the repo-infra standard (`oposs/repo-infra`, `@v2`);
+  `repo_infra check` reports any drift.
 - **B-4** The repository is public and is released under the MIT license, which also ships
   inside the app bundle.
 - **B-5** Nothing in the repository identifies the author's systems or networks; examples
@@ -153,8 +161,4 @@ that are only reachable in certain networks.
 
 ## 10. Open questions
 
-- **Q-1 Release notes.** With `--generate-notes` and direct pushes to `main`, GitHub lists
-  no changes (it only lists merged pull requests), and the update dialog shows the raw
-  Markdown link to the comparison. Proposed: write the notes in an annotated tag
-  (`git tag -a v0.0.3 -m "…"`), publish them with `--notes-from-tag`, and fail the
-  release if the tag has no message. Undecided.
+None. (Q-1, the release notes, is settled by B-3: they come from `CHANGES.md`.)
