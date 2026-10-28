@@ -108,6 +108,10 @@ check(rel?.notes, "New: updates", "release: notes")
 check(parseRelease(Data(#"{"tag_name": "v1.3", "assets": []}"#.utf8)), nil, "ignore release without .pkg")
 check(parseRelease(Data("no json".utf8)), nil, "invalid response")
 
+// Release notes as plain text
+check(plainNotes("### Fixed\n- `example.com` is **no** match\n"), "Fixed:\n- example.com is no match", "notes without Markdown")
+check(plainNotes("## 1.0 - 2026-01-01\n### New\n- a"), "1.0 - 2026-01-01:\nNew:\n- a", "headings become labels")
+
 // Optionally a real internal server: MOUNTWELL_TEST_SERVER=fileserver.example.com tests/run.sh
 if let server = ProcessInfo.processInfo.environment["MOUNTWELL_TEST_SERVER"], !server.isEmpty {
     if !resolve(server).isEmpty {

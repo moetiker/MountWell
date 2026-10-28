@@ -18,7 +18,8 @@ let ejectedFile = configDir.appendingPathComponent("ejected")
 let logFile = home.appendingPathComponent("Library/Logs/mountwell.log")
 let scriptPath = Bundle.main.path(forResource: "mountwell", ofType: nil)
     ?? "/Applications/Mountwell.app/Contents/Resources/mountwell"
-let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    ?? ProcessInfo.processInfo.environment["MOUNTWELL_VERSION"] ?? "dev"
 // "owner/repo" on GitHub, filled in by build.sh
 let updateRepo = (Bundle.main.object(forInfoDictionaryKey: "MountwellUpdateRepo") as? String).flatMap { $0.contains("/") ? $0 : nil }
 
@@ -35,8 +36,10 @@ final class Model: ObservableObject {
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
     private var timer: Timer?
 
-    // keeps running without a window, for the menu bar icon
-    init() {
+    // keeps running without a window, for the menu bar icon;
+    // live: false shows only what the caller sets (tools/screenshot)
+    init(live: Bool = true) {
+        guard live else { return }
         load()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
@@ -278,7 +281,7 @@ final class Updater: ObservableObject {
         let a = NSAlert()
         a.messageText = String(localized: "Mountwell \(r.version) Is Available")
         var text = String(localized: "Version \(appVersion) is installed. The installer will ask for an administrator password.")
-        if !r.notes.isEmpty { text += "\n\n" + r.notes }
+        if !r.notes.isEmpty { text += "\n\n" + plainNotes(r.notes) }
         a.informativeText = text
         a.addButton(withTitle: String(localized: "Install"))
         a.addButton(withTitle: String(localized: "Later"))
@@ -320,11 +323,18 @@ final class Updater: ObservableObject {
 extension View {
     @ViewBuilder
     func glassCard(cornerRadius: CGFloat = 18) -> some View {
+        #if SCREENSHOT
+        // glass is drawn by the window server and does not show up in an offscreen
+        // capture; a light fill stands in for it in docs/screenshot.png
+        self.background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        #else
         if #available(macOS 26.0, *) {
             self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
         } else {
             self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
+        #endif
     }
 
     @ViewBuilder
@@ -1111,6 +1121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+#if !SCREENSHOT
 @main
 struct MountwellApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
@@ -1135,3 +1146,4 @@ struct MountwellApp: App {
         }
     }
 }
+#endif

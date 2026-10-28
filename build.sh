@@ -2,7 +2,8 @@
 # Builds "Mountwell.app" (Universal) and from it build/Mountwell-<version>.pkg
 set -eu
 cd "$(dirname "$0")"
-VERSION="${VERSION:-0.0.1}"
+# the release sets VERSION; otherwise the file VERSION, which Create release PR updates
+VERSION="${VERSION:-$(cat VERSION)}"
 # GitHub repository whose releases the app offers as updates
 REPO="${REPO:-moetiker/mountwell}"
 APP="Mountwell"
