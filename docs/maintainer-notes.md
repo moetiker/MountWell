@@ -139,6 +139,11 @@ symptom so it can be checked later whether it still applies.
   (`visibleShares`); with more it stays at 4 cards and scrolls. The window uses
   `.windowResizability(.contentSize)`, so it grows and shrinks with the list and the log
   panel. `onGeometryChange` is back-deployed to macOS 13 and builds for macOS 14.
+- The log panel is a drawer. With `.contentSize` an inserted or removed view makes the
+  window jump to the new height at once while the view is still animating. So the panel
+  always stays in the view tree; only its container height animates between 0 and the
+  measured panel height (`logHeight`), clipped and faded. The window follows that height
+  frame by frame. Hidden, it ignores clicks and is hidden from VoiceOver.
 - The help window is opened with `openWindow(id:)`. The environment is not directly
   available in `.commands`, so the menu lives in its own `Commands` struct with
   `@Environment(\.openWindow)`.

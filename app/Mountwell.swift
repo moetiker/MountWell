@@ -591,6 +591,7 @@ struct ContentView: View {
     @State private var deleting: Share?
     @State private var contentHeight: CGFloat = 0
     @State private var cardHeight: CGFloat = 78
+    @State private var logHeight: CGFloat = 0
     @AppStorage("showLog") private var showLog = false
 
     // up to this many shares the list grows with them, beyond that it scrolls
@@ -610,7 +611,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 0) {
             ScrollView {
                 GlassGroup {
                     VStack(spacing: 10) {
@@ -651,14 +652,23 @@ struct ContentView: View {
             .scrollBounceBehavior(.basedOnSize)
             .frame(height: listHeight)
 
-            if showLog {
-                LogPanel(lines: m.log) { showLog = false }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            // Drawer: the log always stays in the view tree, only the height of its
+            // container is animated. The window (contentSize) follows that height frame
+            // by frame, so window and log move together instead of the window jumping.
+            LogPanel(lines: m.log) { showLog = false }
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { logHeight = $0 }
+                .padding(.top, 14)
+                .frame(height: showLog ? logHeight + 14 : 0, alignment: .bottom)
+                .clipped()
+                .opacity(showLog ? 1 : 0)
+                .allowsHitTesting(showLog)
+                .accessibilityHidden(!showLog)
             StatusBar(m: m)
+                .padding(.top, 14)
                 .zIndex(1)   // the log slides out from behind the status bar
         }
-        .animation(.spring(duration: 0.35, bounce: 0.15), value: showLog)
+        .animation(.smooth(duration: 0.3), value: showLog)
         .padding(16)
         .frame(minWidth: 640)
         .background { Backdrop() }
