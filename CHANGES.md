@@ -14,11 +14,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### New
 
 ### Changed
+
+### Fixed
+
+## 0.0.3 - 2026-10-28
+### Changed
 - The window is as tall as the shares need, up to four; with more, the list scrolls.
 - The log opens and closes like a drawer, and the window grows and shrinks with it.
 - The update dialog shows release notes as plain text, without Markdown marks.
-
-### Fixed
 
 ## 0.0.2 - 2026-10-28
 ### New
