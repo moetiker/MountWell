@@ -1,0 +1,38 @@
+#!/bin/bash
+# Load the service for logged-in users, remove the predecessor "SMB Automount"
+LABEL=ch.oetiker.mountwell
+PLIST="/Library/LaunchAgents/$LABEL.plist"
+APP="/Applications/Mountwell.app"
+OLD=ch.oetiker.smb-automount
+
+chown root:wheel "$PLIST"
+chmod 644 "$PLIST"
+
+# SMB Automount (system-wide installation)
+rm -f "/Library/LaunchAgents/$OLD.plist"
+rm -rf "/Applications/SMB Automount.app"
+pkgutil --forget "$OLD" >/dev/null 2>&1
+
+for uid in $(ps -axo uid=,comm= | awk '/loginwindow$/{print $1}' | sort -u); do
+    user=$(id -un "$uid") || continue
+    home=$(dscl . -read "/Users/$user" NFSHomeDirectory | awk '{print $2}')
+    # SMB Automount as single-user installation (first version)
+    old="$home/Library/LaunchAgents/$OLD.plist"
+    if [ -e "$old" ]; then
+        launchctl bootout "gui/$uid" "$old" 2>/dev/null
+        rm -f "$old" "$home/.local/bin/smb-automount"
+    fi
+    # take over the configuration before the app looks for it (otherwise the script does it on its next run)
+    if [ -d "$home/.config/smb-automount" ] && [ ! -e "$home/.config/mountwell" ]; then
+        mv "$home/.config/smb-automount" "$home/.config/mountwell"
+    fi
+    launchctl bootout "gui/$uid/$LABEL" 2>/dev/null
+    launchctl bootstrap "gui/$uid" "$PLIST"
+    # open the configuration the first time, relaunch the app after an update
+    relaunch="/var/run/$LABEL.relaunch.$uid"
+    if [ -e "$relaunch" ] || [ ! -e "$home/.config/mountwell/shares.conf" ]; then
+        launchctl asuser "$uid" sudo -u "$user" open "$APP"
+    fi
+    rm -f "$relaunch"
+done
+exit 0
