@@ -228,6 +228,8 @@ tests/run.sh
 | `uninstall.sh` | uninstaller |
 | `build.sh` | tests and builds the app and the package |
 | `tests/` | tests, see above |
+| `docs/spec.md` | what Mountwell must do, numbered requirements |
+| `docs/programming-guide.md` | how to work on the code: architecture, conventions, translation, tests, releases |
 | `docs/maintainer-notes.md` | pitfalls and the reasons behind decisions |
 
 ## License
