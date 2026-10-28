@@ -176,6 +176,18 @@ symptom so it can be checked later whether it still applies.
 - The About text comes via `orderFrontStandardAboutPanel` with `.credits`, the copyright
   line from `NSHumanReadableCopyright` in `app/Info.plist`.
 
+## GitHub Actions
+
+- The runner is `macos-26`: the Liquid Glass APIs need the macOS 26 SDK. The runner is
+  Apple silicon; the Intel half of the Universal app is cross-compiled with
+  `-target x86_64-apple-macos14.0`, as locally.
+- The icon is drawn with AppKit on the runner; that works without a display because it
+  renders into an `NSBitmapImageRep`.
+- Releases are published by the workflow with the job's `GITHUB_TOKEN`
+  (`contents: write`) via `gh release create --verify-tag`. Only tags matching `v*`
+  trigger it. The version comes from the tag, so tag and app version cannot diverge.
+- Non-release builds use version `0.0.0`; `isNewer` treats every release as newer.
+
 ## Tests
 
 - `tests/test-mountwell.sh` puts stubs for `nc`, `mount`, `osascript`, `diskutil`,

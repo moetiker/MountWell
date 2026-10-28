@@ -107,15 +107,16 @@ a `.pkg` file, *Install Update …* appears in the menu bar and in the window's 
 the package to `~/Library/Caches/ch.oetiker.mountwell/` and opens it in Installer, which
 asks for an administrator password. The package quits the app and relaunches it afterwards.
 
-Publishing a new version:
+Publishing a new version: push a tag, GitHub Actions does the rest.
 
 ```sh
-VERSION=0.0.2 ./build.sh
-gh release create v0.0.2 build/Mountwell-0.0.2.pkg --notes "What's new"
+git tag v0.0.3 && git push origin v0.0.3
 ```
 
-The tag is the version; a leading `v` is ignored. The notes appear in the update dialog.
-The repository must be public.
+The workflow tests and builds the package with the version from the tag, then creates
+the release with the package attached and notes generated from the commits since the
+previous release. The notes appear in the update dialog and can be edited on GitHub
+afterwards. The repository must be public.
 
 ## Configuration (per user)
 
@@ -158,6 +159,19 @@ sudo "/Applications/Mountwell.app/Contents/Resources/uninstall.sh"
 ```
 
 Removes the app and the service. The configuration in `~/.config/mountwell` is kept.
+
+## Continuous integration
+
+`.github/workflows/build.yml` runs on GitHub Actions (`macos-26` runner, Xcode 26):
+
+| Trigger | What happens |
+|---|---|
+| pull request | tests and build; the package is attached to the run as an artifact |
+| push to `main` | the same, so `main` always builds |
+| tag `v*` | build with the tag's version, then publish the GitHub release |
+
+Builds that are not releases get version `0.0.0`, so an installed CI build always offers
+the latest release as an update.
 
 ## Building the package
 

@@ -1,0 +1,58 @@
+# Tests and builds Mountwell on every pull request and push to main.
+# A tag v<version> (e.g. v0.0.3) additionally publishes a GitHub release with the
+# package; the app's updater picks it up from there.
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    # macOS 26 SDK (Xcode 26) is needed for the Liquid Glass APIs
+    runs-on: macos-26
+    permissions:
+      contents: write   # only used by the release step on tags
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            # development builds are always older than any release
+            echo "VERSION=0.0.0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Test and build
+        run: ./build.sh
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mountwell-${{ env.VERSION }}
+          path: build/Mountwell-${{ env.VERSION }}.pkg
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "build/Mountwell-$VERSION.pkg" \
+            --title "Mountwell $VERSION" --generate-notes --verify-tag
