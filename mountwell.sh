@@ -7,6 +7,9 @@
 # The optional second field also restricts mounting to networks,
 # e.g. "10.46.,192.168.1." (one of our own IPs must start with one of them).
 # If ~/.config/mountwell/disabled exists, nothing happens.
+# Shares listed in ~/.config/mountwell/ejected (one server/share per line, written
+# by the app's eject button) are not mounted again until the entry is removed:
+# by mounting them again, or when the server is out of reach.
 
 set -u
 CONFDIR="$HOME/.config/mountwell"
@@ -17,6 +20,7 @@ TIMEOUT=2
 # before a mounted share counts as gone: this many attempts, this many seconds apart
 TRIES=3
 RETRY_DELAY="${MOUNTWELL_RETRY_DELAY:-5}"
+EJECTED="$CONFDIR/ejected"
 
 log() {
     local line
@@ -66,9 +70,22 @@ reachable() {
     return 1
 }
 
+# ejected by hand in the app?
+is_ejected() {
+    [ -f "$EJECTED" ] && grep -qixF "$1" "$EJECTED"
+}
+
+# forget a manual eject: the share gets mounted automatically again
+unmark() {
+    [ -f "$EJECTED" ] && grep -qixF "$1" "$EJECTED" || return 0
+    grep -vixF "$1" "$EJECTED" > "$EJECTED.tmp"
+    mv "$EJECTED.tmp" "$EJECTED"
+}
+
 mountpoint_of() {
     # mount prints e.g. "//user@server/share on /Volumes/share (smbfs, ...)"
-    mount -t smbfs | grep -iF "$1 on " | sed -E 's/^.* on (.*) \(smbfs.*$/\1/' | head -1
+    # the name must follow "@" or "//", so "example.com/x" does not match "fileserver.example.com/x"
+    mount -t smbfs | grep -iF -e "@$1 on " -e "//$1 on " | sed -E 's/^.* on (.*) \(smbfs.*$/\1/' | head -1
 }
 
 while read -r url nets; do
@@ -77,11 +94,16 @@ while read -r url nets; do
     rest="${rest#*@}"            # strip user@
     host="${rest%%/*}"
     share="${rest#*/}"
-    mp=$(mountpoint_of "$host/$share")
+    key="$host/$share"
+    mp=$(mountpoint_of "$key")
+    # mounted again (by hand or via the app): no longer ejected
+    [ -n "$mp" ] && unmark "$key"
 
     if in_allowed_net "${nets:-}"; then
         if [ -z "$mp" ]; then
-            if reachable 1; then
+            if ! reachable 1; then
+                unmark "$key"    # server out of reach: mount again next time
+            elif ! is_ejected "$key"; then
                 log "mounting $url"
                 osascript -e "mount volume \"$url\"" >/dev/null 2>&1 \
                     || log "mount failed: $url"
@@ -101,5 +123,7 @@ while read -r url nets; do
             log "wrong network and $host unreachable, unmounting $mp"
             diskutil unmount force "$mp" >/dev/null 2>&1 || umount -f "$mp"
         fi
+    else
+        unmark "$key"    # left the network: mount again next time
     fi
 done < "$CONF"

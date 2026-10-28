@@ -106,6 +106,16 @@ symptom so it can be checked later whether it still applies.
   attempt during a Wi-Fi dropout would otherwise unmount a working share.
 - Wrong network but the server responds: only `diskutil unmount` without `force`. If that
   fails because of open files, the share stays mounted and the next run tries again.
+- Ejecting in Finder cannot be told apart from a lost connection, so the next run would
+  mount the share again. The app's eject therefore writes `server/share` to
+  `~/.config/mountwell/ejected` before `diskutil unmount` (without `force`; if that fails
+  because of open files, the entry is removed again and the app says so). The script
+  skips listed shares and forgets the entry when the share is mounted again, when the
+  server does not answer, or when the network does not match. So an eject lasts until
+  you leave the network, not forever.
+- Matching `mount` output requires `@` or `/` right before `server/share`, otherwise
+  `example.com/team` would match `fileserver.example.com/team` (`mountPoint(of:in:)` in
+  `app/Core.swift`; the script compares the same way via `grep -iF`).
 - Without a configuration, or with `~/.config/mountwell/disabled`, the script exits
   quietly with code 0. The first version wrote "no configuration" to the log every minute
   and exited with 1.
@@ -122,6 +132,8 @@ symptom so it can be checked later whether it still applies.
 - The address check in the editor uses `getaddrinfo` and `getnameinfo`. Both block, so
   they run in `Task.detached`. `.task(id: share.host)` cancels the check on the next
   keystroke; a 500 ms delay avoids one DNS lookup per character.
+- The "Automatic" switch in the toolbar uses `.controlSize(.mini)`; the regular switch
+  looked oversized next to the toolbar buttons.
 - The help window is opened with `openWindow(id:)`. The environment is not directly
   available in `.commands`, so the menu lives in its own `Commands` struct with
   `@Environment(\.openWindow)`.

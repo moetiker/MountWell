@@ -28,6 +28,9 @@ For each configured share the script checks:
 | no (3 attempts, 5 s apart) | yes | unmount (`diskutil unmount force`) |
 | no  | no  | nothing |
 
+A share ejected by hand in the app is not mounted again until you mount it again or the
+server goes out of reach (see *Eject* below).
+
 If the file server's name points to an internal address (e.g. 192.168.10.20), it is only
 reachable in the office network or over VPN. Reachability is therefore the only
 criterion; there are no Wi-Fi names to maintain.
@@ -67,7 +70,13 @@ when the app is not running.
   (creates or removes `~/.config/mountwell/disabled`)
 - **Background service running / not loaded**: whether the LaunchAgent runs; *Load* starts it
 - **Shares** with a status icon: green = mounted, orange = reachable but not mounted,
-  gray = server unreachable
+  gray = server unreachable or ejected by hand
+- **Eject** (button on a mounted share, context menu, or the share's submenu in the menu
+  bar): unmounts the share and records it in `~/.config/mountwell/ejected`. The background
+  service then leaves it alone until it is mounted again (**Mount** button, menu, or by
+  hand in Finder) or the server goes out of reach, e.g. when you leave the office network.
+  Ejecting in Finder alone does not stick: the service mounts the share again within a
+  minute.
 - **Only in networks**: optional restriction to IP prefixes, e.g. `10.46.,192.168.1.`.
   Empty means: always mount when the server is reachable. In another network the share is
   unmounted, but not forced while the server responds: if files are open, the share stays
@@ -126,6 +135,10 @@ smb://nas.local/backup 192.168.1.
 
 Without a configuration the service does nothing.
 
+`~/.config/mountwell/ejected` lists shares ejected by hand (`server/share`, one per line).
+The app maintains it; the script removes entries once the share is mounted again or the
+server is out of reach.
+
 ## Checking on it
 
 ```sh
@@ -180,8 +193,8 @@ tests/run.sh
   checked as well, provided it resolves (office network/VPN).
 - `tests/test-mountwell.sh`: the mount script with stubs for `nc`, `mount`, `osascript`,
   `diskutil` and `ifconfig`. Covers all cases (mount, unmount, short dropouts, wrong network,
-  open files, disabled, comments, several shares, similar names, taking over the
-  predecessor's configuration) without a network and without real mounts.
+  open files, disabled, ejected by hand, comments, several shares, similar names, taking
+  over the predecessor's configuration) without a network and without real mounts.
 
 `build.sh` runs the tests before packaging and stops on failure.
 

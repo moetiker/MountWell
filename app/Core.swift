@@ -182,3 +182,17 @@ func searchDomain() -> String? {
 func fullNameExample(_ host: String) -> String {
     "\(host).\(searchDomain() ?? "example.com")"
 }
+
+// mount point of "server/share" in the output of `mount -t smbfs`, e.g.
+// "//user@server/share on /Volumes/share (smbfs, ...)"; case-insensitive
+func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
+    for line in mountOutput.split(separator: "\n") {
+        // the name must start right after "@" or "//", so "example.com" does not match "fileserver.example.com"
+        guard let r = line.range(of: "\(hostShare) on ", options: .caseInsensitive),
+              r.lowerBound > line.startIndex, "@/".contains(line[line.index(before: r.lowerBound)]),
+              let end = line.range(of: " (smbfs", options: .backwards), r.upperBound <= end.lowerBound
+        else { continue }
+        return String(line[r.upperBound..<end.lowerBound])
+    }
+    return nil
+}

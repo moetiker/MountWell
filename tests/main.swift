@@ -74,6 +74,18 @@ check(resolve("does-not-exist.invalid"), [], ".invalid does not resolve")
 check(checkHost("does-not-exist.invalid").dns, .failed, "checkHost: does not resolve")
 check(checkHost("127.0.0.1").dns, .ip, "checkHost: IP detected")
 
+// Mount points from `mount -t smbfs`
+let mountOut = """
+    //anna@fileserver.example.com/team on /Volumes/team (smbfs, nodev, nosuid, mounted by anna)
+    //anna@fileserver.example.com/My%20Files on /Volumes/My Files (smbfs, nodev, nosuid, mounted by anna)
+    //anna@srv.example/share-old on /Volumes/share-old (smbfs, nodev, nosuid, mounted by anna)
+    """
+check(mountPoint(of: "fileserver.example.com/team", in: mountOut), "/Volumes/team", "mount point")
+check(mountPoint(of: "FileServer.Example.com/Team", in: mountOut), "/Volumes/team", "mount point ignores case")
+check(mountPoint(of: "fileserver.example.com/my%20files", in: mountOut), "/Volumes/My Files", "mount point with space")
+check(mountPoint(of: "srv.example/share", in: mountOut), nil, "similar name is not a mount point")
+check(mountPoint(of: "example.com/team", in: mountOut), nil, "host suffix is not a match")
+
 // Version comparison
 check(isNewer("1.1", than: "1.0"), true, "1.1 > 1.0")
 check(isNewer("1.10", than: "1.9"), true, "1.10 > 1.9 (numeric)")

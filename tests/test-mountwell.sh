@@ -159,6 +159,43 @@ setup 'smb://srv.example/share\n' 'srv.example\n' \
 runit
 expect "similar name does not count as mounted" 'mount volume "smb://srv.example/share"'
 
+setup 'smb://example.com/team\n' 'example.com\n' "$M"
+runit
+expect "host suffix does not count as mounted" 'mount volume "smb://example.com/team"'
+
+# ejected by hand in the app
+E="$T/home/.config/mountwell/ejected"
+setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
+echo "FileServer.Example.com/team" > "$E"
+runit
+expect "ejected, reachable → do not mount again" 'osascript' nogrep
+grep -qix "fileserver.example.com/team" "$E" && pass=$((pass + 1)) \
+    || { fail=$((fail + 1)); echo "FAIL: eject entry lost while server reachable"; }
+
+setup 'smb://fileserver.example.com/team\nsmb://fileserver.example.com/other\n' 'fileserver.example.com\n' ''
+printf 'fileserver.example.com/team\n' > "$E"
+runit
+expect "ejected share does not block other shares" 'mount volume "smb://fileserver.example.com/other"'
+
+setup 'smb://fileserver.example.com/team\n' '' ''
+echo "fileserver.example.com/team" > "$E"
+runit
+grep -qi "fileserver.example.com/team" "$E" && { fail=$((fail + 1)); echo "FAIL: eject not forgotten when server out of reach"; } \
+    || pass=$((pass + 1))
+
+setup 'smb://fileserver.example.com/team 192.168.1.\n' 'fileserver.example.com\n' ''
+echo "fileserver.example.com/team" > "$E"
+runit
+grep -qi "fileserver.example.com/team" "$E" && { fail=$((fail + 1)); echo "FAIL: eject not forgotten in another network"; } \
+    || pass=$((pass + 1))
+
+setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' "$M"
+echo "fileserver.example.com/team" > "$E"
+runit
+grep -qi "fileserver.example.com/team" "$E" && { fail=$((fail + 1)); echo "FAIL: eject not forgotten after mounting again"; } \
+    || pass=$((pass + 1))
+expect "mounted again by hand → leave it mounted" 'diskutil|osascript' nogrep
+
 # predecessor SMB Automount: configuration and log are taken over
 setup '' 'fileserver.example.com\n' ''
 rm -rf "$T/home/.config/mountwell"

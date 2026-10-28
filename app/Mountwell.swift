@@ -13,6 +13,8 @@ let home = FileManager.default.homeDirectoryForCurrentUser
 let configDir = home.appendingPathComponent(".config/mountwell")
 let configFile = configDir.appendingPathComponent("shares.conf")
 let disabledFile = configDir.appendingPathComponent("disabled")
+// shares ejected by hand; mountwell.sh does not mount them again until the entry is gone
+let ejectedFile = configDir.appendingPathComponent("ejected")
 let logFile = home.appendingPathComponent("Library/Logs/mountwell.log")
 let scriptPath = Bundle.main.path(forResource: "mountwell", ofType: nil)
     ?? "/Applications/Mountwell.app/Contents/Resources/mountwell"
@@ -24,7 +26,8 @@ let updateRepo = (Bundle.main.object(forInfoDictionaryKey: "MountwellUpdateRepo"
 final class Model: ObservableObject {
     @Published var shares: [Share] = []
     @Published var enabled = true
-    @Published var mounted: Set<String> = []
+    @Published var mountPoints: [String: String] = [:]   // hostShare → /Volumes/…
+    @Published var ejected: Set<String> = []
     @Published var reachable: [String: Bool] = [:]
     @Published var agentLoaded = false
     @Published var log: [String] = []
@@ -41,7 +44,10 @@ final class Model: ObservableObject {
         }
     }
 
-    var mountedCount: Int { shares.filter { mounted.contains($0.hostShare) }.count }
+    var mountedCount: Int { shares.filter { isMounted($0) }.count }
+
+    func isMounted(_ s: Share) -> Bool { mountPoints[s.hostShare] != nil }
+    func isEjected(_ s: Share) -> Bool { ejected.contains(s.hostShare) }
 
     var menuBarIcon: String {
         if !enabled { return "externaldrive.badge.xmark" }
@@ -111,6 +117,57 @@ final class Model: ObservableObject {
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
+    // Unmount by hand. Remembered in ejectedFile, otherwise the background
+    // service would mount the share again within a minute.
+    func eject(_ s: Share) {
+        guard let mp = mountPoints[s.hostShare] else { return }
+        setEjected(s, true)
+        busy = true
+        Task.detached {
+            let result = run("/usr/sbin/diskutil", ["unmount", mp])
+            await MainActor.run {
+                self.busy = false
+                if result.status != 0 {
+                    self.setEjected(s, false)
+                    showAlert(String(localized: "“\(s.name)” could not be ejected"),
+                              String(localized: "Files on it may still be open. Close them and try again."))
+                }
+                self.refresh()
+            }
+        }
+    }
+
+    // Mount right away, also when "Automatic" is off, and forget an earlier eject
+    func mount(_ s: Share) {
+        setEjected(s, false)
+        busy = true
+        let url = s.url.replacingOccurrences(of: "\"", with: "\\\"")
+        Task.detached {
+            run("/usr/bin/osascript", ["-e", "mount volume \"\(url)\""])
+            await MainActor.run {
+                self.busy = false
+                self.refresh()
+            }
+        }
+    }
+
+    private func setEjected(_ s: Share, _ on: Bool) {
+        var set = Self.readEjected()
+        if on { set.insert(s.hostShare) } else { set.remove(s.hostShare) }
+        try? FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+        if set.isEmpty {
+            try? FileManager.default.removeItem(at: ejectedFile)
+        } else {
+            try? (set.sorted().joined(separator: "\n") + "\n").write(to: ejectedFile, atomically: true, encoding: .utf8)
+        }
+        ejected = set
+    }
+
+    nonisolated static func readEjected() -> Set<String> {
+        let text = (try? String(contentsOf: ejectedFile, encoding: .utf8)) ?? ""
+        return Set(text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty })
+    }
+
     func loadAgent() {
         run("/bin/launchctl", ["bootstrap", "gui/\(getuid())", agentPlist])
         refresh()
@@ -130,8 +187,13 @@ final class Model: ObservableObject {
     func refresh() {
         let snapshot = shares
         Task.detached(priority: .utility) {
-            let mountOut = run("/sbin/mount", ["-t", "smbfs"]).output.lowercased()
-            let mounted = Set(snapshot.map(\.hostShare).filter { mountOut.contains("\($0) on ") })
+            let mountOut = run("/sbin/mount", ["-t", "smbfs"]).output
+            var points: [String: String] = [:]
+            for hs in snapshot.map(\.hostShare) {
+                if let mp = mountPoint(of: hs, in: mountOut) { points[hs] = mp }
+            }
+            let mountPoints = points
+            let ejected = Model.readEjected()
             var reach: [String: Bool] = [:]
             for h in Set(snapshot.map(\.host)) where !h.isEmpty {
                 reach[h] = smbReachable(h)
@@ -141,13 +203,22 @@ final class Model: ObservableObject {
                 .split(separator: "\n").suffix(50).reversed().map(String.init)
             let reachable = reach
             await MainActor.run {
-                self.mounted = mounted
+                self.mountPoints = mountPoints
+                self.ejected = ejected
                 self.reachable = reachable
                 self.agentLoaded = agent
                 self.log = lines
             }
         }
     }
+}
+
+func showAlert(_ title: String, _ text: String) {
+    let a = NSAlert()
+    a.messageText = title
+    a.informativeText = text
+    NSApp.activate()
+    a.runModal()
 }
 
 // MARK: - Updates
@@ -240,11 +311,7 @@ final class Updater: ObservableObject {
     }
 
     private func info(_ title: String, _ text: String) {
-        let a = NSAlert()
-        a.messageText = title
-        a.informativeText = text
-        NSApp.activate()
-        a.runModal()
+        showAlert(title, text)
     }
 }
 
@@ -308,13 +375,17 @@ struct GlassGroup<Content: View>: View {
 struct ShareCard: View {
     let share: Share
     let mounted: Bool
+    let ejected: Bool
     let reachable: Bool?
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let onEject: () -> Void
+    let onMount: () -> Void
     @State private var hovering = false
 
     private var state: (icon: String, color: Color, text: LocalizedStringKey) {
         if mounted { return ("externaldrive.fill.badge.checkmark", .green, "Mounted") }
+        if ejected { return ("eject.fill", .gray, "Ejected") }
         switch reachable {
         case true?: return ("externaldrive.fill.badge.wifi", .orange, "Reachable")
         case false?: return ("externaldrive.fill.badge.xmark", .gray, "Unreachable")
@@ -349,6 +420,13 @@ struct ShareCard: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 6) {
+                if mounted {
+                    Button(action: onEject) { Image(systemName: "eject") }
+                        .help("Eject. Stays ejected until you mount it again or leave the network.")
+                } else if reachable == true {
+                    Button(action: onMount) { Image(systemName: "arrow.down.circle") }
+                        .help("Mount now")
+                }
                 Button {
                     if let u = URL(string: share.url) { NSWorkspace.shared.open(u) }
                 } label: {
@@ -378,6 +456,12 @@ struct ShareCard: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: onEdit)
         .contextMenu {
+            if mounted {
+                Button("Eject", action: onEject)
+            } else {
+                Button("Mount", action: onMount)
+            }
+            Divider()
             Button("Edit…", action: onEdit)
             Button("Connect in Finder") {
                 if let u = URL(string: share.url) { NSWorkspace.shared.open(u) }
@@ -532,13 +616,16 @@ struct ContentView: View {
                         ForEach(m.shares) { share in
                             ShareCard(
                                 share: share,
-                                mounted: m.mounted.contains(share.hostShare),
+                                mounted: m.isMounted(share),
+                                ejected: m.isEjected(share),
                                 reachable: m.reachable[share.host],
                                 onEdit: {
                                     editingIsNew = false
                                     editing = share
                                 },
-                                onDelete: { deleting = share }
+                                onDelete: { deleting = share },
+                                onEject: { m.eject(share) },
+                                onMount: { m.mount(share) }
                             )
                         }
                     }
@@ -567,6 +654,7 @@ struct ContentView: View {
                     Text("Automatic")
                 }
                 .toggleStyle(.switch)
+                .controlSize(.mini)
                 .help("Mount and unmount shares automatically")
             }
             ToolbarItemGroup(placement: .primaryAction) {
@@ -834,6 +922,9 @@ struct HelpView: View {
                 section("Only in networks", "line.3.horizontal.decrease.circle", """
                     Optional, comma-separated, e.g. **10.46.,192.168.1.**: the share is then only mounted when one of your own IP addresses starts with one of these prefixes. Leave it empty to always mount when the server is reachable. For servers with a DNS name and an internal address, this is usually not needed.
                     """)
+                section("Ejecting", "eject", """
+                    Use the **eject button** on a share, or its entry in the menu bar, to unmount it by hand. Mountwell then leaves it alone until you mount it again or the server goes out of reach, e.g. when you leave the office network. Ejecting in Finder does not work for this: the background service mounts the share again within a minute.
+                    """)
                 section("Password", "key", """
                     The background service takes the password from the keychain. So connect once per share with the **link button** and choose **“Remember this password in my keychain”** in the Finder dialog.
                     """)
@@ -932,12 +1023,19 @@ struct MenuBarMenu: View {
             Text("No Shares")
         }
         ForEach(m.shares) { share in
-            let mounted = m.mounted.contains(share.hostShare)
             let reachable = m.reachable[share.host] == true
-            Button {
-                if let u = URL(string: share.url) { NSWorkspace.shared.open(u) }
+            let icon = m.isMounted(share) ? "checkmark.circle.fill"
+                : m.isEjected(share) ? "eject.circle" : reachable ? "circle" : "xmark.circle"
+            Menu {
+                if let mp = m.mountPoints[share.hostShare] {
+                    Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: mp)) }
+                    Button("Eject") { m.eject(share) }
+                } else {
+                    Button("Mount") { m.mount(share) }
+                        .disabled(!reachable)
+                }
             } label: {
-                Label(share.name, systemImage: mounted ? "checkmark.circle.fill" : reachable ? "circle" : "xmark.circle")
+                Label(share.name, systemImage: icon)
             }
         }
         Divider()
