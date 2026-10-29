@@ -19,6 +19,12 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-mountwell}"
 # a release must not ship unsigned: with REQUIRE_SIGNING=1 a missing piece is an error
 REQUIRE_SIGNING="${REQUIRE_SIGNING:-0}"
 
+# An invalid team ID reaches the app as "no team ID", and the app then installs any update
+# unchecked (U-4). Refuse it instead.
+if [ -n "$TEAM_ID" ] && ! [[ "$TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+    echo "TEAM_ID must be 10 upper-case letters and digits, not \"$TEAM_ID\"" >&2
+    exit 1
+fi
 if [ "$REQUIRE_SIGNING" = 1 ] && { [ -z "$SIGN_APP" ] || [ -z "$SIGN_PKG" ] || [ -z "$TEAM_ID" ]; }; then
     echo "REQUIRE_SIGNING=1, but Developer ID Application, Developer ID Installer or the team ID is missing" >&2
     exit 1
@@ -37,22 +43,33 @@ mkdir -p "$B/root/Applications" "$B/root/Library/LaunchAgents"
 BUNDLE="$B/root/Applications/$APP.app"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 
+# the app: every Swift file in app/ except the icon generator (a script) and smb-id (its own
+# program in app/smb-id/)
+APP_SOURCES=$(ls app/*.swift | grep -v '/make-icon\.swift$')
 for arch in arm64 x86_64; do
+    # shellcheck disable=SC2086
     swiftc -sdk "$SDKROOT" -O -parse-as-library -swift-version 5 -target "$arch-apple-macos14.0" \
-        app/Core.swift app/Mountwell.swift -o "$B/app-$arch"
+        $APP_SOURCES -o "$B/app-$arch"
+    swiftc -sdk "$SDKROOT" -O -swift-version 5 -target "$arch-apple-macos14.0" \
+        app/Core.swift app/smb-id/main.swift -o "$B/smb-id-$arch"
 done
 lipo -create -output "$BUNDLE/Contents/MacOS/$APP" "$B/app-arm64" "$B/app-x86_64"
+# server ID for mountwell.sh (M-13); in MacOS/ so codesign treats it as nested code
+lipo -create -output "$BUNDLE/Contents/MacOS/smb-id" "$B/smb-id-arm64" "$B/smb-id-x86_64"
 
 sed -e "s/@VERSION@/$VERSION/g" -e "s|@REPO@|$REPO|g" -e "s|@TEAM_ID@|$TEAM_ID|g" app/Info.plist > "$BUNDLE/Contents/Info.plist"
 install -m 755 mountwell.sh "$BUNDLE/Contents/Resources/mountwell"
 install -m 755 uninstall.sh "$BUNDLE/Contents/Resources/uninstall.sh"
+install -m 755 app/install-update.sh "$BUNDLE/Contents/Resources/install-update"
 install -m 644 LICENSE "$BUNDLE/Contents/Resources/LICENSE"
 # languages: macOS shows the UI in the system language if the app has it
 cp -R app/*.lproj "$BUNDLE/Contents/Resources/"
 swift app/make-icon.swift "$B/AppIcon.iconset"
 iconutil -c icns "$B/AppIcon.iconset" -o "$BUNDLE/Contents/Resources/AppIcon.icns"
 if [ -n "$SIGN_APP" ]; then
-    # hardened runtime and a secure timestamp are what notarization requires
+    # hardened runtime and a secure timestamp are what notarization requires,
+    # for the nested helper as well; it is signed first, the bundle seals it
+    codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$BUNDLE/Contents/MacOS/smb-id"
     codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$BUNDLE"
     codesign --verify --strict --verbose=2 "$BUNDLE"
 else

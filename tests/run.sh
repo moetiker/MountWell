@@ -8,3 +8,4 @@ trap 'rm -rf "$OUT"' EXIT
 swiftc -sdk "$SDKROOT" -swift-version 5 app/Core.swift tests/main.swift -o "$OUT/core-tests"
 "$OUT/core-tests"
 tests/test-mountwell.sh
+tests/test-install-update.sh

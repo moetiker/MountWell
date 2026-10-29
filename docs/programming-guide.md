@@ -29,7 +29,15 @@ SIGN_APP= SIGN_PKG= TEAM_ID= ./build.sh   # unsigned, as without certificates
 - `mountwell.sh`: run by launchd, does all automatic mounting.
 - `app/Core.swift`: logic without UI (parsing, name resolution, mount table matching,
   versions, releases). Testable logic goes here.
-- `app/Mountwell.swift`: UI, model, updater. Mounts only on explicit Mount and Eject.
+- `app/Model.swift`: the state behind window and menu bar; reads and writes the files
+  in `~/.config/mountwell/` under the script's lock. Mounts only on explicit Mount and
+  Eject.
+- `app/Mountwell.swift`: paths, entry point, menu commands, app delegate.
+- `app/MainWindow.swift`, `ShareEditor.swift`, `Import.swift`, `Help.swift`,
+  `MenuBar.swift`, `Glass.swift`: the views, one file per window or menu.
+- `app/Updater.swift`: update check and install (U-1 to U-4).
+- `app/smb-id/`: prints a server's SMB ServerGuid for the script (M-12).
+- `app/install-update.sh`: checks and installs a signed update as root (U-4).
 - `app/de.lproj/`: German translation.
 
 App and script talk through the files in `~/.config/mountwell/` (spec section 3). A new

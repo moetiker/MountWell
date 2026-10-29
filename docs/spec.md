@@ -20,7 +20,8 @@ configuration, the Mac App Store.
 - **M-3** A mounted share whose server fails three checks 5 seconds apart is unmounted with
   force. One failed check does nothing.
 - **M-4** A share may be limited to IP prefixes. It is mounted only while one of the Mac's
-  IPv4 addresses starts with one of them.
+  IPv4 addresses starts with one of them. Empty entries in the list are ignored; a list
+  of only empty entries means no limit.
 - **M-5** Outside those networks a mounted share is unmounted without force while its
   server answers; if files are open it stays and the next run retries. If the server does
   not answer, unmount with force.
@@ -34,6 +35,32 @@ configuration, the Mac App Store.
 - **M-10** Mounts, unmounts and failures are logged with a timestamp, in English, to
   `~/Library/Logs/mountwell.log`. Runs without an action log nothing.
 - **M-11** After a network change the service waits 3 seconds. Runs from the app do not.
+- **M-12** While a server name resolves, the service remembers its IPv4 address, the
+  network it is reached through (the /24 prefix of the Mac's own address on that
+  interface and the MAC address of that interface's router, none over VPN) and the
+  server's SMB2 ServerGuid (C-5). Only a server that answers with its ID is remembered.
+  A name keeps one entry per network: an entry learned at home does not replace the
+  office's.
+- **M-13** When the name does not resolve, the service uses the remembered address for
+  reachability, mounting and unmounting: the entry whose address is reached through the
+  network it was learned in, only while the keychain holds an SMB entry for it. Before mounting, the server at
+  the address must report the remembered ID. A share mounted via the address counts as
+  mounted (M-7 with the address as server).
+- **M-14** A share configured by IP address is remembered on its first mount in each
+  network. In a network it was seen in, it is mounted only if the same server ID answers;
+  in a network it has not been seen in yet, it is not mounted automatically until it has
+  been mounted there by hand once.
+- **M-20** The URL reaches `mount volume` as an argument of `osascript`, never as part of
+  the script text (also in the app, A-7).
+- **M-17** A mounted share whose name does not resolve is checked (M-3) via its
+  remembered address, whatever the network, so a short DNS outage does not unmount it.
+- **M-18** A router MAC that cannot be read (empty ARP cache after a network change) is
+  retried once after pinging the router. If it is still unknown, nothing is remembered and
+  the remembered address is not used for mounting in that run.
+- **M-19** Only one run at a time; a second run waits up to 30 seconds, then exits.
+- **M-16** A switched-off share (C-1) is never mounted or unmounted, but while it is
+  mounted by hand its server is remembered as in M-12 and M-14.
+- **M-15** A refusal under M-13 or M-14 is logged once, not on every run.
 
 ## 3. Configuration
 
@@ -46,12 +73,19 @@ configuration, the Mac App Store.
   `server/share` per line. The app adds, the service removes (M-6).
 - **C-4** Configuration and log of the predecessor "SMB Automount" are moved over unless
   Mountwell's already exist.
+- **C-5** `~/.config/mountwell/servers.yaml`, written by the service: a list `servers`
+  with `name`, `ip`, `network` (own /24 prefix), `router` (MAC, `-` over VPN), `server_id`
+  and `seen`, all quoted strings; one entry per server name or configured IP. Entries
+  missing a field are ignored. The app removes an entry on Forget Remembered Server.
 
 ## 4. App
 
 - **A-1** The window lists shares with name, server, status (mounted, reachable,
   unreachable, ejected, checking, off) and network limits, refreshed every 10 seconds while
   a window is open and every minute otherwise. Servers of mounted shares are not probed.
+  A remembered address (C-5) shows next to the server, with a crossed-out key while the
+  keychain has no entry for it; the context menu then offers to connect via the address
+  and to forget the remembered server.
   A spinner on the icon shows while the share is mounted or ejected, and while the probe of
   an unmounted share that is on takes longer than half a second.
 - **A-2** Shares can be added, edited and removed (with confirmation; a mounted share stays
@@ -79,8 +113,8 @@ configuration, the Mac App Store.
   a login item, the app shows no window unless Show Window at Login is on or no share is
   configured yet. Started by hand, it always shows the window.
 - **A-12** Help (⌘?) covers address format, DNS names vs. IPs, troubleshooting, network
-  limits, aliases, importing, switching shares off, ejecting, the keychain and starting
-  at login.
+  limits, aliases, importing, switching shares off, the DNS fallback, ejecting, the
+  keychain and starting at login.
 - **A-13** There is only one main window.
 - **A-14** Liquid Glass on macOS 26, materials on macOS 14 and 15; light and dark mode.
 - **A-15** Settings (⌘,) and the menu bar menu offer Run at Login (start the app at
@@ -107,6 +141,8 @@ configuration, the Mac App Store.
   `/Applications/Mountwell.app` and the system-wide LaunchAgent `ch.oetiker.mountwell`.
 - **I-2** Installing loads the service for all logged-in users and opens the app for users
   without a configuration.
+- **I-7** Installing acts only on logged-in users with a uid of 501 or more, not on the
+  login window's root session.
 - **I-3** Installing over a running app quits and relaunches it.
 - **I-4** Installing removes SMB Automount and takes over its configuration (C-4).
 - **I-5** An uninstaller in the app bundle removes app and service, keeps the
@@ -121,9 +157,12 @@ configuration, the Mac App Store.
   `.pkg` asset.
 - **U-3** The update shows in the menu bar and status bar. It installs only after the user
   confirms the dialog (version, notes) and enters the administrator password.
-- **U-4** The package is downloaded over HTTPS under a fixed name and opened in Installer.
-  If the app was built with a team ID (`TEAM_ID`), the package must carry a trusted
-  Developer ID Installer signature of that team, or it is deleted and not installed.
+- **U-4** The package is downloaded over HTTPS under a fixed name. If the app was built
+  with a team ID (`TEAM_ID`), `install-update` runs as root (after the administrator
+  password): it copies the package into a directory only root can write, checks there
+  that it carries a trusted Developer ID Installer signature of that team, and installs
+  that copy. A package that fails the check is deleted and not installed. Without a team
+  ID the package opens in Installer and the update dialog says that it cannot be checked.
 
 ## 8. Build, CI and release
 
@@ -142,7 +181,10 @@ configuration, the Mac App Store.
 - **B-8** With Developer ID certificates in the keychain, `./build.sh` signs the app
   (hardened runtime) and the package, notarizes and staples it, and sets `TEAM_ID` from
   the installer certificate. Without them it builds unsigned. A release build with the
-  signing secrets fails rather than ship an unsigned package.
+  signing secrets fails rather than ship an unsigned package, and so does one without
+  them once the repository variable `REQUIRE_SIGNED_RELEASES` is `1`. A signed release
+  package is checked (signature, Gatekeeper, stapled ticket, team ID in the app) before it
+  is uploaded. `TEAM_ID` must be 10 upper-case letters and digits.
 
 ## 9. Known limits
 

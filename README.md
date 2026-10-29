@@ -44,6 +44,10 @@ smb://nas.example.com/photos 192.168.10. # Photos at home
 !smb://fileserver.example.com/archive
 ```
 
+If a server name stops resolving, for example when the VPN's DNS breaks, the background
+service mounts via the server's last known IP address, from the same network only. Connect
+once via that address (right-click the share) so its password is in the keychain too.
+
 The log is `~/Library/Logs/mountwell.log`.
 
 ## Uninstall
