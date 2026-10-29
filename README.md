@@ -10,8 +10,9 @@ whose server is gone, and after the VPN comes up the shares are there.
 ![The Mountwell window with three shares](docs/screenshot.png)
 
 - A background service checks every share on each network change and every minute.
-- Shares can be limited to networks by IP prefix, and ejected by hand.
+- Shares can be limited to networks by IP prefix, given an alias, and ejected by hand.
 - A menu bar icon shows the state; the app checks addresses while you type them.
+- Mountwell can start at login, with or without its window (Settings, ⌘,).
 - The app follows the Mac's language (English or German) and finds its own updates.
 
 macOS 14 or later, Apple silicon or Intel.
@@ -34,11 +35,11 @@ so the background service can mount without asking.
 ## Configuration
 
 The app writes `~/.config/mountwell/shares.conf`, one share per line, with an optional
-list of IP prefixes:
+list of IP prefixes and an optional alias after `#`:
 
 ```
 smb://fileserver.example.com/team
-smb://nas.example.com/photos 192.168.10.
+smb://nas.example.com/photos 192.168.10. # Photos at home
 ```
 
 The log is `~/Library/Logs/mountwell.log`.

@@ -90,6 +90,18 @@ struct Share: Identifiable, Equatable {
     var id = UUID()
     var url: String
     var networks: String
+    var alias = ""
+
+    // what the UI shows: the alias, or else the share name
+    var title: String {
+        let a = alias.trimmingCharacters(in: .whitespaces)
+        return a.isEmpty ? name : a
+    }
+
+    // the menu bar menu has no second line: the alias, or else "server/share"
+    var menuTitle: String {
+        title == name ? "\(host)/\(name)" : title
+    }
 
     // "server/share" in lower case, as it appears in the mount output
     var hostShare: String {
@@ -183,6 +195,33 @@ func fullNameExample(_ host: String) -> String {
     "\(host).\(searchDomain() ?? "example.com")"
 }
 
+// One shares.conf line: "smb://[user@]server/share [prefix,prefix] [# alias]".
+// nil for blank lines and comment lines.
+func parseShareLine(_ line: String) -> Share? {
+    var t = line.trimmingCharacters(in: .whitespaces)
+    guard !t.isEmpty, !t.hasPrefix("#") else { return nil }
+    var alias = ""
+    if let hash = t.firstIndex(of: "#") {
+        alias = t[t.index(after: hash)...].trimmingCharacters(in: .whitespaces)
+        t = t[..<hash].trimmingCharacters(in: .whitespaces)
+    }
+    let parts = t.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
+    let nets = parts.count > 1 ? parts[1].replacingOccurrences(of: " ", with: "") : ""
+    return Share(url: String(parts[0]), networks: nets, alias: alias)
+}
+
+func shareLine(_ s: Share) -> String? {
+    let url = s.url.trimmingCharacters(in: .whitespaces)
+    guard !url.isEmpty else { return nil }
+    var line = url
+    let nets = s.networks.replacingOccurrences(of: " ", with: "")
+    if !nets.isEmpty { line += " \(nets)" }
+    // "#" would start a new alias when the line is read back
+    let alias = s.alias.replacingOccurrences(of: "#", with: "").trimmingCharacters(in: .whitespaces)
+    if !alias.isEmpty { line += " # \(alias)" }
+    return line
+}
+
 // mount point of "server/share" in the output of `mount -t smbfs`, e.g.
 // "//user@server/share on /Volumes/share (smbfs, ...)"; case-insensitive
 func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
@@ -195,6 +234,28 @@ func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
         return String(line[r.upperBound..<end.lowerBound])
     }
     return nil
+}
+
+// Team ID of a package signed with a Developer ID Installer certificate, read from the
+// output of `pkgutil --check-signature`: "1. Developer ID Installer: Name (TEAMID)".
+// nil for unsigned packages and any other kind of signature. Whether the chain is
+// trusted is pkgutil's exit status, which the caller checks.
+func installerTeamID(_ output: String) -> String? {
+    let lines = output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+    guard lines.contains("Status: signed by a developer certificate issued by Apple for distribution"),
+          let leaf = lines.first(where: { $0.hasPrefix("1. ") }),
+          leaf.hasPrefix("1. Developer ID Installer: "), leaf.hasSuffix(")"),
+          lines.contains("2. Developer ID Certification Authority"),
+          lines.contains("3. Apple Root CA"),
+          let open = leaf.lastIndex(of: "(")
+    else { return nil }
+    let team = String(leaf[leaf.index(after: open)..<leaf.index(before: leaf.endIndex)])
+    return isTeamID(team) ? team : nil
+}
+
+// Apple team IDs are 10 characters, upper-case letters and digits
+func isTeamID(_ s: String) -> Bool {
+    s.count == 10 && s.allSatisfy { ($0.isUppercase || $0.isNumber) && $0.isASCII }
 }
 
 // Release notes for a plain-text alert: "### Fixed" → "Fixed:", without `code` and **bold** marks

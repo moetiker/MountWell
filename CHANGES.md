@@ -12,8 +12,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
+- Settings (⌘,) with "Run at Login" and "Show Window at Login"; both are also in the menu bar menu.
+- A share can have an alias, shown in the window and the menu instead of the share name.
+- The menu bar menu shows each share by its alias, or else as server/share.
+- Help explains aliases and starting at login.
 
 ### Changed
+- "Open at Login" in the menu bar menu is now called "Run at Login".
 
 ### Fixed
 

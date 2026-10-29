@@ -1,230 +1,156 @@
 # Maintainer notes
 
-What had to be known, or went wrong, while building Mountwell. Each point names the
-symptom so it can be checked later whether it still applies.
+Reasons and pitfalls. Each point names the symptom, so it can be checked whether it
+still applies.
 
-## Name
+## Name and icon
 
-- Until the rename the project was called "SMB Automount" (bundle ID
-  `ch.oetiker.smb-automount.app`, label `ch.oetiker.smb-automount`, package 1.0).
-  Mountwell starts at version 0.0.1 under a new package ID. `postinstall` removes the
-  old installation; the script and `postinstall` move `~/.config/smb-automount` and the
-  old log, as long as nothing new exists yet.
-- "Mountly" was rejected because there already is a macOS app of that name that mounts
-  drives (mountlyapp.vercel.app), plus a company and an npm package. In October 2026
-  "Mountwell" turned up neither in the Mac App Store nor as an app; mountwell.com is
-  registered, though.
-- The icon shows a mountain (mount, mountain) and is drawn in `app/make-icon.swift`.
-  Before, it was an SF Symbol, whose license does not allow use in app icons.
+- The predecessor was "SMB Automount" (`ch.oetiker.smb-automount`, package 1.0).
+  `postinstall` removes it; script and `postinstall` move its configuration and log.
+- "Mountly" is taken by a macOS mount app. "Mountwell" was free in October 2026.
+- The icon is drawn by `app/make-icon.swift`; the SF Symbol license forbids app icons.
 
 ## Language
 
-- Everything in the repository is English. Only the app UI follows the Mac's language.
-  English is the development language (`CFBundleDevelopmentRegion` `en`), German lives in
-  `app/de.lproj/`.
-- `Localizable.strings` keys are the English texts. Interpolations become `%@` for
-  strings and `%lld` for integers; with two integers German uses `%1$lld`/`%2$lld`.
-- Only `Text("…")`, `Button("…")`, `LocalizedStringKey` and `String(localized:)` are
-  looked up. A `String` passed through a parameter is shown verbatim, which is why
-  `Hint` takes `Text` and `Tag` takes `LocalizedStringKey`.
-- The help texts are multi-line literals. Their keys are the literal's content after
-  Swift strips the indentation, with `\n` between lines. When the English text changes,
-  the German key must change with it, or the help silently falls back to English.
-- `en.lproj/Localizable.strings` only contains a comment. It has to exist so macOS lists
-  English as supported.
-- The log written by `mountwell.sh` is always English. `LogPanel` picks its icons from
-  the words `mounting`, `unmounting` and `failed`.
+- `Localizable.strings` keys are the English texts, with `%@` and `%lld`; two integers
+  become `%1$lld`/`%2$lld` in German.
+- A `String` passed through a parameter is shown verbatim, so `Hint` takes `Text` and
+  `Tag` takes `LocalizedStringKey`.
+- Help texts are multi-line literals; the key is the text after Swift strips the
+  indentation, lines joined by `\n`. Change the English text and the German key must
+  follow, or the help silently falls back to English.
+- `en.lproj/Localizable.strings` is empty but must exist, or macOS does not list English.
 
-## Build environment
+## Build
 
-- With stale headers in `/usr/local/include` (for example `stdbool.h`, `Block.h`), `swiftc`
-  without an explicit SDK fails with `#include nested too deeply` and
-  `could not build Objective-C module 'Accessibility'`. `build.sh` and `tests/run.sh`
-  therefore set `SDKROOT`. `swiftc -sdk` alone is not enough: `swift app/make-icon.swift`
-  (interpreter) needs the exported `SDKROOT`.
-- With Swift 6 the build uses `-swift-version 5`, so the strict concurrency checks of
-  Swift 6 do not raise errors. The one remaining warning
-  (`reference to captured var 'reach' in concurrently-executing code`) is fixed by
-  copying the variable into a constant before `MainActor.run`.
-- There is no Xcode project. The app is compiled per architecture with
-  `swiftc -parse-as-library` and combined into a Universal app with `lipo`.
-  `-parse-as-library` is needed because `@main` otherwise clashes with top-level code.
-- With several source files Swift only allows top-level code in `main.swift`.
-  `tests/CoreTests.swift` failed with `expressions are not allowed at the top level`
-  and is therefore named `tests/main.swift`.
-- `internal` is a keyword and not allowed as a variable name
-  (`keyword 'internal' cannot be used as an identifier here`).
-- `Timer.publish(...).autoconnect()` as a property produces the warning
-  `'Combine' was not imported by this file` without `import Combine`.
-- On Apple silicon every executable must be signed. Without a Developer ID it is signed
-  ad hoc (`codesign --sign -`).
-- The icon is drawn at build time (`app/make-icon.swift`) and turned into
-  `AppIcon.icns` with `iconutil`. There are no image files in the repository.
+- Stale headers in `/usr/local/include` make `swiftc` fail with
+  `#include nested too deeply`. `build.sh` and `tests/run.sh` export `SDKROOT`;
+  `swiftc -sdk` does not cover `swift app/make-icon.swift`.
+- `-swift-version 5` keeps Swift 6 concurrency checks from failing the build.
+- No Xcode project: `swiftc -parse-as-library` per architecture, then `lipo`.
+  `-parse-as-library` because `@main` clashes with top-level code.
+- With several files only `main.swift` may hold top-level code, so the tests live in
+  `tests/main.swift`.
+- Apple silicon requires a signature; without a Developer ID it is ad hoc
+  (`codesign --sign -`).
+
+## Signing
+
+- `build.sh` finds the certificates with `security find-identity`: codesigning policy for
+  "Developer ID Application", basic policy for "Developer ID Installer" (the installer
+  certificate is not a code signing identity).
+- Notarization requires `--options runtime` and `--timestamp`. No entitlements are needed:
+  the app starts `osascript`, `nc` and `pkgutil` as separate processes.
+- `notarytool submit --wait` exits 0 also for "Invalid", so `build.sh` reads the status
+  from the plist output and prints the log on anything but "Accepted".
+- `AssociatedBundleIdentifiers` in the LaunchAgent only shows "Mountwell" in Login Items
+  when app and agent come from a team-signed package (I-6).
+- CI: `MACOS_CERTS_P12` holds both certificates in one .p12 (base64),
+  `MACOS_CERTS_PASSWORD` its password, `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and
+  `NOTARY_ISSUER` the App Store Connect API key. They go into a temporary keychain;
+  `set-key-partition-list` keeps `codesign` from asking for the keychain password.
+  `release-build.yml` passes the secrets on with `secrets: inherit`.
+- With the secrets set, `REQUIRE_SIGNING=1`: a release with `TEAM_ID` in it makes every
+  installed app reject unsigned updates from then on.
 
 ## Package
 
-- `BundleIsRelocatable` is switched off. Otherwise Installer puts the app wherever
-  LaunchServices already knows a copy with the same bundle ID. After a build exactly such
-  a copy sits in `build/root/Applications/`, and the LaunchAgent points to
-  `/Applications/Mountwell.app`.
-- Files carrying the `com.apple.provenance` attribute (created for example when building from
-  inside a sandbox) keep it through `xattr -cr`, and `pkgbuild` adds `._` entries for
-  them to the package. Built from a normal Terminal, they do not appear.
-- Without a Developer ID certificate (`security find-identity -v -p basic`) the package
-  stays unsigned, and Gatekeeper asks on double-click.
-- The LaunchAgent lives system-wide in `/Library/LaunchAgents`. `~` is not allowed in
-  `StandardOutPath` there, so the script writes its log itself to
-  `~/Library/Logs/mountwell.log`.
-- `postinstall` runs as root. It finds logged-in users through their `loginwindow`
-  processes and loads the service with `launchctl bootstrap gui/<uid>`. It opens the app
-  with `launchctl asuser <uid> sudo -u <user> open`, otherwise it would run as root.
-- The predecessor SMB Automount first ran as a per-user LaunchAgent in
-  `~/Library/LaunchAgents`, later system-wide. `postinstall` removes both variants so
-  that two services do not handle the same shares.
-- `uninstall.sh` deletes the app bundle it lives in. The whole procedure sits in
-  `main()` with `exit` right after it, so bash does not keep reading from the deleted file.
+- `BundleIsRelocatable` is off. Otherwise Installer updates the copy in
+  `build/root/Applications/` instead of `/Applications`.
+- Built inside a sandbox, files keep `com.apple.provenance` and `pkgbuild` adds `._`
+  entries. Build from a normal Terminal.
+- The LaunchAgent is in `/Library/LaunchAgents`, where `~` is not allowed in
+  `StandardOutPath`, so the script writes its own log.
+- `postinstall` runs as root, finds users via `loginwindow` and uses
+  `launchctl bootstrap gui/<uid>` and `launchctl asuser … sudo -u … open`.
+- `postinstall` removes both the per-user and system-wide SMB Automount agents, or two
+  services would handle the same shares.
+- `uninstall.sh` deletes its own bundle, so everything runs in `main()` followed by
+  `exit`; bash would otherwise read on from the deleted file.
+- `preinstall` records a running app in `/var/run/ch.oetiker.mountwell.relaunch.<uid>`
+  for `postinstall`. A file in `/tmp` could be pre-created as a symlink.
 
 ## Mount script
 
-- `WatchPaths` on `/Library/Preferences/SystemConfiguration` fires on Wi-Fi and
-  Ethernet changes. Many VPN clients only set up a `utun` interface and write nothing
-  there. `StartInterval` 60 covers those cases.
-- After a network change the script waits 3 seconds for DHCP and DNS. `--now` skips this
-  for calls from the app and the tests.
-- Reachable means: `nc -z -G 2 <host> 445` connects. `-G` only limits the connection
-  setup, not a hanging DNS lookup.
-- `mount -t smbfs` prints `//user@host/share on /Volumes/share (smbfs, ...)`, even when
-  the URL has no user. The comparison ignores case and looks for `host/share on `. The
-  trailing ` on ` makes sure `share-old` does not count as `share` (test "similar name").
-- Mounting uses `osascript -e 'mount volume "smb://..."'` because that takes the password
-  from the keychain. The password must have been saved once via Finder with "Remember
-  this password in my keychain", otherwise every background run shows a password dialog.
-- Unmounting uses `diskutil unmount force`, falling back to `umount -f`. A normal unmount
-  fails when the server is gone, and Finder then hangs on the drive.
-- A forced unmount discards open files. A mounted server therefore only counts as gone
-  after 3 failed attempts 5 s apart (`TRIES`, `MOUNTWELL_RETRY_DELAY`). A single lost
-  attempt during a Wi-Fi dropout would otherwise unmount a working share.
-- Wrong network but the server responds: only `diskutil unmount` without `force`. If that
-  fails because of open files, the share stays mounted and the next run tries again.
-- Ejecting in Finder cannot be told apart from a lost connection, so the next run would
-  mount the share again. The app's eject therefore writes `server/share` to
-  `~/.config/mountwell/ejected` before `diskutil unmount` (without `force`; if that fails
-  because of open files, the entry is removed again and the app says so). The script
-  skips listed shares and forgets the entry when the share is mounted again, when the
-  server does not answer, or when the network does not match. So an eject lasts until
-  you leave the network, not forever.
-- Matching `mount` output requires `@` or `/` right before `server/share`, otherwise
-  `example.com/team` would match `fileserver.example.com/team` (`mountPoint(of:in:)` in
-  `app/Core.swift`; the script compares the same way via `grep -iF`).
-- Without a configuration, or with `~/.config/mountwell/disabled`, the script exits
-  quietly with code 0. The first version wrote "no configuration" to the log every minute
-  and exited with 1.
-- If the server name is a CNAME, the reverse lookup of the IP returns the host's name,
-  not the alias. When an IP is entered, the app therefore suggests the host name.
+- `WatchPaths` misses VPN clients that only add a `utun` interface; `StartInterval` 60
+  catches them.
+- Reachable means `nc -z -G 2 <host> 445`. `-G` does not bound a hanging DNS lookup.
+- `mount` prints `//user@host/share on …` even without a user. The match requires `@` or
+  `/` before and ` on ` after `server/share` (M-7).
+- `osascript … mount volume` is used because it takes the password from the keychain. It
+  must have been saved once in Finder, or every run shows a dialog.
+- `diskutil unmount force`, then `umount -f`: a plain unmount fails once the server is
+  gone and Finder hangs.
+- A forced unmount discards open files, hence three tries 5 s apart (`TRIES`,
+  `MOUNTWELL_RETRY_DELAY`). A Wi-Fi dropout once unmounted a working share.
+- An eject in Finder looks like a lost connection. The app's eject writes `ejected` first;
+  the entry lasts until the network or server changes (M-6).
+- The first version logged "no configuration" every minute and exited 1 (now M-9).
+- For a CNAME the reverse lookup returns the host name, not the alias; the app suggests
+  that host name for an IP.
 
 ## App
 
-- Liquid Glass (`glassEffect`, `GlassEffectContainer`, button styles `.glass` and
-  `.glassProminent`) exists from macOS 26. Below that, the helpers `glassCard` and
-  `glassButton` use materials and `.bordered`.
-- The minimum version is macOS 14, because of `buttonBorderShape(.circle)` and
-  `ContentUnavailableView`.
-- The address check in the editor uses `getaddrinfo` and `getnameinfo`. Both block, so
-  they run in `Task.detached`. `.task(id: share.host)` cancels the check on the next
-  keystroke; a 500 ms delay avoids one DNS lookup per character.
-- The "Automatic" switch in the toolbar uses `.controlSize(.mini)`; the regular switch
-  looked oversized next to the toolbar buttons.
-- The main window has no fixed height. The share list measures its content and its
-  first card with `onGeometryChange` and takes exactly that height up to 4 shares
-  (`visibleShares`); with more it stays at 4 cards and scrolls. The window uses
-  `.windowResizability(.contentSize)`, so it grows and shrinks with the list and the log
-  panel. `onGeometryChange` is back-deployed to macOS 13 and builds for macOS 14.
-- The log panel is a drawer. With `.contentSize` an inserted or removed view makes the
-  window jump to the new height at once while the view is still animating. So the panel
-  always stays in the view tree; only its container height animates between 0 and the
-  measured panel height (`logHeight`), clipped and faded. The window follows that height
-  frame by frame. Hidden, it ignores clicks and is hidden from VoiceOver.
-- The help window is opened with `openWindow(id:)`. The environment is not directly
-  available in `.commands`, so the menu lives in its own `Commands` struct with
-  `@Environment(\.openWindow)`.
-- The main window is a `Window`, not a `WindowGroup`. With `WindowGroup`, ⌘N opened more
-  windows, each with its own `Model`, which overwrote each other's `shares.conf`.
-- The `Model` belongs to the app, not the window, so the menu bar icon (`MenuBarExtra`)
-  stays current without a window. The timer lives in the `Model`.
-- Without a window the AppDelegate switches to `.accessory` (no Dock icon); `showWindow`
-  switches back to `.regular` before opening. With `LSUIElement` there would never be a
-  Dock icon and no menus (View, Help) either.
-- "Open at Login" uses `SMAppService.mainApp`. The app recognises a launch as login item
-  by `keyAELaunchedAsLogInItem` in the launch Apple event and then closes the window.
-- `NSLocalNetworkUsageDescription` is in `Info.plist` because the app checks servers on
-  the local network through `nc` (Local Network privacy since macOS 15).
-- Updates come from GitHub Releases. The repository is stored as `MountwellUpdateRepo`
-  in `Info.plist` (`REPO` in `build.sh`). Without a valid value there are no update
-  menus. The unauthenticated API allows 60 requests per hour and IP and returns 404 for
-  private repositories.
-- The package is downloaded with `URLSession`. Files from `URLSession` get no quarantine
-  attribute, so Installer opens the unsigned package without a Gatekeeper prompt. The
-  only check is that it comes from GitHub over HTTPS. Whoever can create releases in the
-  repository can therefore ship code that runs as root. With a Developer ID the app could
-  run `pkgutil --check-signature` before opening it.
-- In the cache the package is always called `Mountwell-Update.pkg`. The version comes
-  from the network and does not belong in a file path.
-- `preinstall` quits a running app with `pkill -x "Mountwell"` and records that in
-  `/var/run/ch.oetiker.mountwell.relaunch.<uid>`. `postinstall` then relaunches it.
-  `/var/run` belongs to root; a file in `/tmp` could be created as a symlink by users
-  beforehand.
-- The About text comes via `orderFrontStandardAboutPanel` with `.credits`, the copyright
-  line from `NSHumanReadableCopyright` in `app/Info.plist`.
+- Liquid Glass needs macOS 26; below, `glassCard` and `glassButton` use materials.
+  Minimum macOS 14 for `buttonBorderShape(.circle)` and `ContentUnavailableView`.
+- Address checks (`getaddrinfo`, `getnameinfo`) block, so they run detached, debounced
+  500 ms, cancelled by `.task(id:)`.
+- Toolbar switches use `.controlSize(.mini)`; the regular size looked oversized.
+- The toolbar hides a switch's label, so a second switch there ("At Login") looked
+  identical to "Automatic". A labelled switch in the status bar followed and was dropped
+  again: the login settings live in Settings and the menu bar menu.
+- "Open at Login" was read as "open the window at login". It is now Run at Login, with
+  Show Window at Login as a separate setting.
+- The window sizes to its content (`.contentSize`, `onGeometryChange`, `visibleShares`).
+- Inserting the log panel made the window jump while the view animated. The panel stays
+  in the tree and only its clipped container height animates.
+- `.commands` has no `openWindow`, so the menu is a separate `Commands` struct.
+- `Window`, not `WindowGroup`: ⌘N opened windows with their own `Model` that overwrote
+  each other's `shares.conf`.
+- The `Model` belongs to the app so `MenuBarExtra` works without a window.
+- Without a window the app switches to `.accessory`. `LSUIElement` would also remove the
+  menus.
+- Login item: `SMAppService.mainApp`; a login launch is detected by
+  `keyAELaunchedAsLogInItem` and closes the window.
+- `NSLocalNetworkUsageDescription` is needed because `nc` probes the local network
+  (macOS 15).
+- Updates read `MountwellUpdateRepo` from `Info.plist`. The anonymous API allows 60
+  requests per hour and returns 404 for private repositories.
+- `URLSession` downloads carry no quarantine, so Installer opens the package without
+  Gatekeeper. Anyone who can publish releases could ship root code, so a build with
+  `TEAM_ID` runs `pkgutil --check-signature` and requires a Developer ID Installer
+  certificate whose name ends in that team ID. Older certificates without the team ID
+  in the name (XQuartz 2.7.8, 2015) are rejected. A build without `TEAM_ID`, such as
+  0.0.3, installs any package.
+- The cached package is always `Mountwell-Update.pkg`; a version from the network does
+  not belong in a path.
 
-## GitHub Actions and releases
+## CI and releases
 
-- The setup follows the repo-infra standard. No piece builds Swift, so the tests and
-  the package run in the project's own `ci-local.yml` and `release-build-local.yml`
-  (the owner chose these over teaching the standard a Swift piece). The release flow,
-  the changelog gate and the ruleset are the standard's.
-- The runners are `macos-26`: the Liquid Glass APIs need the macOS 26 SDK. They are
-  Apple silicon; the Intel half of the Universal app is cross-compiled with
-  `-target x86_64-apple-macos14.0`, as locally.
-- The icon is drawn with AppKit on the runner; that works without a display because it
-  renders into an `NSBitmapImageRep`.
-- The version lives in `VERSION`, listed in `version_files` of `.github/repo-infra.json`.
-  `build.sh` reads it unless `VERSION` is set in the environment, which
-  `release-build-local.yml` does with the version of the release.
-- A first attempt released on every pushed tag `v*` with `gh release create
-  --generate-notes`. Without pull requests the generated notes held only a link to the
-  comparison, and the update dialog showed it as raw Markdown. The release notes now come
-  from `CHANGES.md`, and `plainNotes` strips the Markdown marks for the dialog.
-- `exceptions` in `.github/repo-infra.json` records why there are no Linux packages and
-  no Homebrew formula.
+- No repo-infra piece builds Swift, so `ci-local.yml` and `release-build-local.yml` do.
+- `macos-26` runners provide the Liquid Glass SDK; Intel is cross-compiled with
+  `-target x86_64-apple-macos14.0`.
+- `build.sh` reads `VERSION` unless the environment sets it.
+- Releases from tags with `--generate-notes` had empty notes, shown as raw Markdown.
+  Notes now come from `CHANGES.md`; `plainNotes` strips the Markdown.
 
 ## Screenshot
 
-- `docs/screenshot.png` is rendered by `tools/screenshot.sh`: the real `ContentView`
-  with a `Model(live: false)` holding example shares on `example.com`, so the picture
-  never shows a real server or user. `-D SCREENSHOT` leaves out the app's `@main`.
-- Liquid Glass is drawn by the window server and is missing from an offscreen capture
-  (`cacheDisplay`); the cards came out without a background. In `SCREENSHOT` builds
-  `glassCard` uses a light fill instead.
-- A capture of the real window (`screencapture -l`) needs the Screen Recording
-  permission and would show the real configuration.
+- `tools/screenshot.sh` renders `ContentView` with `Model(live: false)` and example
+  shares. `-D SCREENSHOT` drops `@main`.
+- An offscreen capture misses Liquid Glass, so `SCREENSHOT` builds use a light fill.
+- `screencapture -l` needs Screen Recording and would show the real configuration.
 
 ## Tests
 
-- `tests/test-mountwell.sh` puts stubs for `nc`, `mount`, `osascript`, `diskutil`,
-  `umount` and `ifconfig` in front of `PATH`. This works because the script calls these
-  programs without an absolute path. Switching the script to `/sbin/mount` or similar
-  makes the tests meaningless.
-- `HOME` points to a temporary directory so the user's configuration, `disabled` and log
-  stay untouched.
-- Counter-check: with a copy of the script in which `diskutil unmount force` is replaced
-  by `true` (`MOUNTWELL_SCRIPT=...`), the forced-unmount tests fail.
+- The script stubs work only because the script calls tools without a path.
+- `HOME` is a temporary directory.
+- Counter-check: replace `diskutil unmount force` by `true` (`MOUNTWELL_SCRIPT=…`) and the
+  forced-unmount tests fail.
 
 ## Open
 
-- Actually disconnecting VPN or Wi-Fi has not been observed yet, only simulated.
-- The UI is not tested automatically. Screenshots and UI scripting need the Screen
-  Recording and Accessibility permissions.
-- The update function is only covered by tests of `isNewer` and `parseRelease`, not yet
-  by a real update from one version to the next.
-- Signing and notarization need an Apple Developer account with "Developer ID
-  Application" and "Developer ID Installer".
+- A real VPN or Wi-Fi disconnect has not been observed, only simulated.
+- No real update from one version to the next has been tested.
+- Signing and notarization have not run yet; no certificates existed when they were
+  added.

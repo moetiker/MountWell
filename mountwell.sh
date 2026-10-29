@@ -3,7 +3,8 @@
 # (right network or VPN up) and unmounts them again when it is not.
 #
 # Configuration: ~/.config/mountwell/shares.conf
-#   smb://user@server/share  [IP prefixes, comma-separated]
+#   smb://user@server/share  [IP prefixes, comma-separated]  [# alias]
+# The alias after "#" is a display name for the app; this script ignores it.
 # The optional second field also restricts mounting to networks,
 # e.g. "10.46.,192.168.1." (one of our own IPs must start with one of them).
 # If ~/.config/mountwell/disabled exists, nothing happens.
@@ -90,6 +91,8 @@ mountpoint_of() {
 
 while read -r url nets; do
     [[ -z "$url" || "$url" == \#* ]] && continue
+    nets="${nets%%#*}"           # "# alias" is for the app only
+    nets="${nets//[[:space:]]/}"
     rest="${url#smb://}"
     rest="${rest#*@}"            # strip user@
     host="${rest%%/*}"

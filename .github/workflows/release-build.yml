@@ -25,3 +25,5 @@ jobs:
     with:
       version: ${{ inputs.version }}
       ref: ${{ inputs.ref }}
+    # the signing certificates and the notarization key (release-build-local.yml)
+    secrets: inherit
