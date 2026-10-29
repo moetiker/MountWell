@@ -33,11 +33,19 @@ final class Model: ObservableObject {
     @Published var mountPoints: [String: String] = [:]   // hostShare → /Volumes/…
     @Published var ejected: Set<String> = []
     @Published var reachable: [String: Bool] = [:]
+    // servers whose port is being probed right now, and shares being mounted or ejected
+    @Published var checking: Set<String> = []
+    @Published var working: Set<String> = []
     @Published var agentLoaded = false
     @Published var log: [String] = []
     @Published var busy = false
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
+    // proposals of "Import Mounted Shares"; non-nil shows the import sheet
+    @Published var imports: [ImportItem]?
     private var timer: Timer?
+    private var lastRefresh = Date.distantPast
+    // servers being probed; they show in `checking` only once a probe takes a while
+    private var probing: Set<String> = []
 
     // keeps running without a window, for the menu bar icon;
     // live: false shows only what the caller sets (tools/screenshot)
@@ -45,8 +53,14 @@ final class Model: ObservableObject {
         guard live else { return }
         load()
         refresh()
+        // every 10 s while a window shows the state, else once a minute for the menu bar icon:
+        // each refresh starts mount, nc per server and launchctl
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in
+                guard let self else { return }
+                let visible = NSApp.windows.contains { $0.isVisible && $0.canBecomeMain }
+                if visible || Date().timeIntervalSince(self.lastRefresh) >= 60 { self.refresh() }
+            }
         }
     }
 
@@ -54,6 +68,15 @@ final class Model: ObservableObject {
 
     func isMounted(_ s: Share) -> Bool { mountPoints[s.hostShare] != nil }
     func isEjected(_ s: Share) -> Bool { ejected.contains(s.hostShare) }
+
+    // the card's spinner: something is under way whose result is not shown yet
+    func isWorking(_ s: Share) -> Bool {
+        if working.contains(s.hostShare) { return true }
+        guard s.enabled, !isMounted(s) else { return false }
+        if checking.contains(s.host) { return true }
+        // "Check Now": the service is about to mount what is reachable
+        return busy && enabled && s.enabled && !isMounted(s) && !isEjected(s) && reachable[s.host] == true
+    }
 
     var menuBarIcon: String {
         if !enabled { return "externaldrive.badge.xmark" }
@@ -68,7 +91,8 @@ final class Model: ObservableObject {
 
     func save() {
         var text = """
-            # smb://[user@]server/share   [optional IP prefixes, comma-separated]   [# optional alias]
+            # [!]smb://[user@]server/share   [optional IP prefixes, comma-separated]   [# optional alias]
+            # "!" disables a share: it is neither mounted nor unmounted
             # Managed by Mountwell.app
 
             """
@@ -91,6 +115,34 @@ final class Model: ObservableObject {
 
     func delete(_ share: Share) {
         shares.removeAll { $0.id == share.id }
+        save()
+    }
+
+    func setShareEnabled(_ share: Share, _ on: Bool) {
+        guard let i = shares.firstIndex(where: { $0.id == share.id }) else { return }
+        shares[i].enabled = on
+        save()
+    }
+
+    // proposals from the SMB shares mounted right now that are not configured yet
+    func findImports() {
+        let configured = shares
+        Task.detached {
+            let out = run("/sbin/mount", ["-t", "smbfs"]).output
+            let found = importProposals(out, configured: configured).map { ImportItem(share: $0.share, mountPoint: $0.mountPoint) }
+            await MainActor.run {
+                if found.isEmpty {
+                    showAlert(String(localized: "Nothing to Import"),
+                              String(localized: "Every mounted SMB share is already in Mountwell. Connect to a share in Finder first, then import it here."))
+                } else {
+                    self.imports = found
+                }
+            }
+        }
+    }
+
+    func importShares(_ items: [ImportItem]) {
+        shares += items.filter(\.selected).map(\.share)
         save()
     }
 
@@ -120,10 +172,12 @@ final class Model: ObservableObject {
         guard let mp = mountPoints[s.hostShare] else { return }
         setEjected(s, true)
         busy = true
+        working.insert(s.hostShare)
         Task.detached {
             let result = run("/usr/sbin/diskutil", ["unmount", mp])
             await MainActor.run {
                 self.busy = false
+                self.working.remove(s.hostShare)
                 if result.status != 0 {
                     self.setEjected(s, false)
                     showAlert(String(localized: "“\(s.title)” could not be ejected"),
@@ -138,11 +192,13 @@ final class Model: ObservableObject {
     func mount(_ s: Share) {
         setEjected(s, false)
         busy = true
+        working.insert(s.hostShare)
         let url = s.url.replacingOccurrences(of: "\"", with: "\\\"")
         Task.detached {
             run("/usr/bin/osascript", ["-e", "mount volume \"\(url)\""])
             await MainActor.run {
                 self.busy = false
+                self.working.remove(s.hostShare)
                 self.refresh()
             }
         }
@@ -182,6 +238,7 @@ final class Model: ObservableObject {
     }
 
     func refresh() {
+        lastRefresh = Date()
         let snapshot = shares
         Task.detached(priority: .utility) {
             let mountOut = run("/sbin/mount", ["-t", "smbfs"]).output
@@ -191,20 +248,34 @@ final class Model: ObservableObject {
             }
             let mountPoints = points
             let ejected = Model.readEjected()
-            var reach: [String: Bool] = [:]
-            for h in Set(snapshot.map(\.host)) where !h.isEmpty {
-                reach[h] = smbReachable(h)
+            // a mounted share shows "Mounted" whatever the port says; the service watches it
+            let hosts = Set(snapshot.filter { mountPoints[$0.hostShare] == nil }.map(\.host)).filter { !$0.isEmpty }
+            // a server that answers does so in milliseconds; a spinner for that would only flicker
+            await MainActor.run {
+                self.probing.formUnion(hosts)
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let slow = self.probing.subtracting(self.checking)
+                    if !slow.isEmpty { self.checking.formUnion(slow) }
+                }
+            }
+            for h in hosts {
+                let r = smbReachable(h)
+                await MainActor.run {
+                    self.probing.remove(h)
+                    if self.reachable[h] != r { self.reachable[h] = r }
+                    if self.checking.contains(h) { self.checking.remove(h) }
+                }
             }
             let agent = run("/bin/launchctl", ["print", "gui/\(getuid())/\(agentLabel)"]).status == 0
             let lines = ((try? String(contentsOf: logFile, encoding: .utf8)) ?? "")
                 .split(separator: "\n").suffix(50).reversed().map(String.init)
-            let reachable = reach
+            // reachable is set per server above; only what changed: every assignment redraws the window
             await MainActor.run {
-                self.mountPoints = mountPoints
-                self.ejected = ejected
-                self.reachable = reachable
-                self.agentLoaded = agent
-                self.log = lines
+                if self.mountPoints != mountPoints { self.mountPoints = mountPoints }
+                if self.ejected != ejected { self.ejected = ejected }
+                if self.agentLoaded != agent { self.agentLoaded = agent }
+                if self.log != lines { self.log = lines }
             }
         }
     }
@@ -390,7 +461,9 @@ struct ShareCard: View {
     let mounted: Bool
     let ejected: Bool
     let reachable: Bool?
+    let working: Bool
     let onEdit: () -> Void
+    let onToggle: (Bool) -> Void
     let onDelete: () -> Void
     let onEject: () -> Void
     let onMount: () -> Void
@@ -398,6 +471,7 @@ struct ShareCard: View {
 
     private var state: (icon: String, color: Color, text: LocalizedStringKey) {
         if mounted { return ("externaldrive.fill.badge.checkmark", .green, "Mounted") }
+        if !share.enabled { return ("pause.fill", .gray, "Off") }
         if ejected { return ("eject.fill", .gray, "Ejected") }
         switch reachable {
         case true?: return ("externaldrive.fill.badge.wifi", .orange, "Reachable")
@@ -412,10 +486,20 @@ struct ShareCard: View {
                 .font(.system(size: 21, weight: .medium))
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.pulse, isActive: reachable == nil && !mounted)
+                .symbolEffect(.pulse, isActive: reachable == nil && !mounted && share.enabled)
                 .frame(width: 46, height: 46)
                 .background(state.color.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .shadow(color: state.color.opacity(0.35), radius: 6, y: 2)
+                // on the icon, so the text next to it does not move
+                .overlay(alignment: .bottomTrailing) {
+                    if working {
+                        ProgressView().controlSize(.small)
+                            .padding(3)
+                            .background(.regularMaterial, in: Circle())
+                            .offset(x: 6, y: 6)
+                            .help("Checking the server or mounting")
+                    }
+                }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(share.title).font(.headline)
@@ -460,6 +544,7 @@ struct ShareCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity)
+        .opacity(share.enabled || hovering ? 1 : 0.6)
         .glassCard()
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -476,6 +561,7 @@ struct ShareCard: View {
             } else {
                 Button("Mount", action: onMount)
             }
+            Toggle("Mount Automatically", isOn: Binding(get: { share.enabled }, set: onToggle))
             Divider()
             Button("Edit…", action: onEdit)
             Button("Connect in Finder") {
@@ -636,8 +722,12 @@ struct ContentView: View {
                             } description: {
                                 Text("Add an SMB share, e.g. smb://fileserver.example.com/team")
                             } actions: {
-                                Button("Add Share") { add() }
-                                    .glassButton(prominent: true)
+                                HStack {
+                                    Button("Add Share") { add() }
+                                        .glassButton(prominent: true)
+                                    Button("Import Mounted Shares…") { m.findImports() }
+                                        .glassButton()
+                                }
                             }
                             .padding(.vertical, 30)
                         }
@@ -647,10 +737,12 @@ struct ContentView: View {
                                 mounted: m.isMounted(share),
                                 ejected: m.isEjected(share),
                                 reachable: m.reachable[share.host],
+                                working: m.isWorking(share),
                                 onEdit: {
                                     editingIsNew = false
                                     editing = share
                                 },
+                                onToggle: { m.setShareEnabled(share, $0) },
                                 onDelete: { deleting = share },
                                 onEject: { m.eject(share) },
                                 onMount: { m.mount(share) }
@@ -722,6 +814,9 @@ struct ContentView: View {
         }
         .sheet(item: $editing) { share in
             ShareEditor(share: share, isNew: editingIsNew) { m.upsert($0) }
+        }
+        .sheet(isPresented: Binding(get: { m.imports != nil }, set: { if !$0 { m.imports = nil } })) {
+            ImportSheet(items: m.imports ?? []) { m.importShares($0) }
         }
         .confirmationDialog(
             "Remove Share?",
@@ -812,6 +907,7 @@ struct ShareEditor: View {
                     TextField("Address", text: $share.url, prompt: Text(verbatim: "smb://server/share"))
                     TextField("Only in networks", text: $share.networks, prompt: Text("optional, e.g. 10.46.,192.168.1."))
                     TextField("Alias", text: $share.alias, prompt: Text("optional, shown instead of the share name"))
+                    Toggle("Mount automatically", isOn: $share.enabled)
                 }
                 Section("Check") {
                     VStack(alignment: .leading, spacing: 10) {
@@ -920,8 +1016,73 @@ struct ShareEditor: View {
         return text + Text(verbatim: " ") + Text("You can save anyway; the share is mounted as soon as the name resolves and the server is reachable.")
     }
 
-    private func prefix24(_ ip: String) -> String {
-        ip.split(separator: ".").prefix(3).joined(separator: ".") + "."
+}
+
+// MARK: - Import
+
+struct ImportItem: Identifiable {
+    let id = UUID()
+    var share: Share
+    let mountPoint: String
+    var selected = true
+}
+
+struct ImportSheet: View {
+    @State var items: [ImportItem]
+    let onImport: ([ImportItem]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.down.on.square")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Import Mounted Shares").font(.title2.bold())
+                    Text("These SMB shares are mounted but not in Mountwell yet.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding([.horizontal, .top], 20)
+
+            Form {
+                ForEach($items) { $item in
+                    Section {
+                        Toggle(isOn: $item.selected) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: item.share.menuTitle).fontWeight(.medium)
+                                Text(verbatim: item.mountPoint).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        if item.selected {
+                            TextField("Address", text: $item.share.url)
+                            TextField("Only in networks", text: $item.share.networks, prompt: Text("optional, e.g. 10.46.,192.168.1."))
+                            TextField("Alias", text: $item.share.alias, prompt: Text("optional, shown instead of the share name"))
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .frame(maxHeight: 420)
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .glassButton()
+                Button("Import \(items.filter(\.selected).count)") {
+                    onImport(items)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!items.contains { $0.selected } || items.contains { $0.selected && !$0.share.isValid })
+                .glassButton(prominent: true)
+            }
+            .controlSize(.large)
+            .padding([.horizontal, .bottom], 20)
+        }
+        .frame(width: 520)
     }
 }
 
@@ -966,6 +1127,11 @@ struct HelpView: View {
                     """)
                 section("Alias", "tag", """
                     Optional name for a share, e.g. **Photos at home**. The window and the menu bar show it instead of the share name. Without an alias the menu bar shows **server/share**. The folder in /Volumes keeps the share's own name.
+                    """)
+                section("Importing and switching off", "square.and.arrow.down.on.square", """
+                    **Import Mounted Shares…** in the menu bar menu proposes every SMB share that is mounted right now but not in Mountwell yet, for example one you connected to in Finder. Check the address, network limit and alias, then import.
+
+                    **Mount Automatically** in a share's context menu, its edit window or its menu bar entry turns it off without removing it: Mountwell then neither mounts nor unmounts it. **Mount** still works by hand.
                     """)
                 section("Ejecting", "eject", """
                     Use the **eject button** on a share, or its entry in the menu bar, to unmount it by hand. Mountwell then leaves it alone until you mount it again or the server goes out of reach, e.g. when you leave the office network. Ejecting in Finder does not work for this: the background service mounts the share again within a minute.
@@ -1114,6 +1280,10 @@ struct MenuBarMenu: View {
         Toggle("Mount Automatically", isOn: Binding(get: { m.enabled }, set: { m.setEnabled($0) }))
         Button("Check Now") { m.runNow() }
             .disabled(m.busy || !m.enabled)
+        Button("Import Mounted Shares…") {
+            showWindow("main", openWindow)
+            m.findImports()
+        }
         Divider()
         Button("Open Mountwell…") { showWindow("main", openWindow) }
         LoginToggles(m: m)
@@ -1128,7 +1298,7 @@ struct MenuBarMenu: View {
 
     private func shareMenu(_ share: Share) -> some View {
         let reachable = m.reachable[share.host] == true
-        let icon = m.isMounted(share) ? "checkmark.circle.fill"
+        let icon = m.isMounted(share) ? "checkmark.circle.fill" : !share.enabled ? "pause.circle"
             : m.isEjected(share) ? "eject.circle" : reachable ? "circle" : "xmark.circle"
         return Menu {
             if let mp = m.mountPoints[share.hostShare] {
@@ -1138,6 +1308,8 @@ struct MenuBarMenu: View {
                 Button("Mount") { m.mount(share) }
                     .disabled(!reachable)
             }
+            Divider()
+            Toggle("Mount Automatically", isOn: Binding(get: { share.enabled }, set: { m.setShareEnabled(share, $0) }))
         } label: {
             Label(share.menuTitle, systemImage: icon)
         }

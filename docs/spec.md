@@ -38,8 +38,9 @@ configuration, the Mac App Store.
 ## 3. Configuration
 
 - **C-1** `~/.config/mountwell/shares.conf`, one share per line:
-  `smb://[user@]server/share [prefix,prefix,…] [# alias]`. Blank lines and lines
-  starting with `#` are ignored. The service ignores the alias.
+  `[!]smb://[user@]server/share [prefix,prefix,…] [# alias]`. Blank lines and lines
+  starting with `#` are ignored. The service ignores the alias. A leading `!` disables
+  the share: the service neither mounts nor unmounts it.
 - **C-2** `~/.config/mountwell/disabled` exists ⇔ automatic mounting is off.
 - **C-3** `~/.config/mountwell/ejected` lists ejected shares, one lower-case
   `server/share` per line. The app adds, the service removes (M-6).
@@ -49,7 +50,10 @@ configuration, the Mac App Store.
 ## 4. App
 
 - **A-1** The window lists shares with name, server, status (mounted, reachable,
-  unreachable, ejected, checking) and network limits, refreshed every 10 seconds.
+  unreachable, ejected, checking, off) and network limits, refreshed every 10 seconds while
+  a window is open and every minute otherwise. Servers of mounted shares are not probed.
+  A spinner on the icon shows while the share is mounted or ejected, and while the probe of
+  an unmounted share that is on takes longer than half a second.
 - **A-2** Shares can be added, edited and removed (with confirmation; a mounted share stays
   mounted). Saving writes the configuration and checks at once.
 - **A-3** A switch turns automatic mounting on and off.
@@ -68,19 +72,28 @@ configuration, the Mac App Store.
   entries, newest first) opens with View → Show Log (⌘L) and is remembered.
 - **A-10** A menu bar icon shows the overall state. Its menu lists each share by its alias,
   or else as `server/share`, and offers per share Show in Finder, Eject or Mount, plus
-  Mount Automatically, Check Now, Open Mountwell, Run at Login, Show Window at Login,
+  a per-share Mount Automatically switch (A-17), plus Mount Automatically, Check Now,
+  Import Mounted Shares (A-18), Open Mountwell, Run at Login, Show Window at Login,
   Check for Updates and Quit.
 - **A-11** Closing the window removes the Dock icon; the menu bar icon stays. Started as
   a login item, the app shows no window unless Show Window at Login is on or no share is
   configured yet. Started by hand, it always shows the window.
 - **A-12** Help (⌘?) covers address format, DNS names vs. IPs, troubleshooting, network
-  limits, ejecting and the keychain.
+  limits, aliases, importing, switching shares off, ejecting, the keychain and starting
+  at login.
 - **A-13** There is only one main window.
 - **A-14** Liquid Glass on macOS 26, materials on macOS 14 and 15; light and dark mode.
 - **A-15** Settings (⌘,) and the menu bar menu offer Run at Login (start the app at
   login) and Show Window at Login (off by default; only with Run at Login).
 - **A-16** A share may have an alias (C-1). Window and menu show it instead of the share
   name; the card then shows `server/share` below it.
+- **A-17** Each share has a Mount Automatically setting (context menu, editor, menu bar)
+  that turns it off without removing it (C-1). The card then shows "Off" and is dimmed.
+  Mounting and ejecting by hand still work.
+- **A-18** Import Mounted Shares (menu bar menu, empty window) reads `mount -t smbfs`
+  and proposes every mounted share that is not configured. The address keeps the user
+  name and drops a password; no network limit is set.
+  Address, limit and alias can be changed and each proposal deselected before import.
 
 ## 5. Language
 

@@ -91,6 +91,8 @@ struct Share: Identifiable, Equatable {
     var url: String
     var networks: String
     var alias = ""
+    // false: the service leaves the share alone ("!" in shares.conf)
+    var enabled = true
 
     // what the UI shows: the alias, or else the share name
     var title: String {
@@ -195,11 +197,14 @@ func fullNameExample(_ host: String) -> String {
     "\(host).\(searchDomain() ?? "example.com")"
 }
 
-// One shares.conf line: "smb://[user@]server/share [prefix,prefix] [# alias]".
-// nil for blank lines and comment lines.
+// One shares.conf line: "[!]smb://[user@]server/share [prefix,prefix] [# alias]",
+// "!" marks a disabled share. nil for blank lines and comment lines.
 func parseShareLine(_ line: String) -> Share? {
     var t = line.trimmingCharacters(in: .whitespaces)
     guard !t.isEmpty, !t.hasPrefix("#") else { return nil }
+    let enabled = !t.hasPrefix("!")
+    if !enabled { t = t.dropFirst().trimmingCharacters(in: .whitespaces) }
+    guard !t.isEmpty else { return nil }
     var alias = ""
     if let hash = t.firstIndex(of: "#") {
         alias = t[t.index(after: hash)...].trimmingCharacters(in: .whitespaces)
@@ -207,13 +212,13 @@ func parseShareLine(_ line: String) -> Share? {
     }
     let parts = t.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
     let nets = parts.count > 1 ? parts[1].replacingOccurrences(of: " ", with: "") : ""
-    return Share(url: String(parts[0]), networks: nets, alias: alias)
+    return Share(url: String(parts[0]), networks: nets, alias: alias, enabled: enabled)
 }
 
 func shareLine(_ s: Share) -> String? {
     let url = s.url.trimmingCharacters(in: .whitespaces)
     guard !url.isEmpty else { return nil }
-    var line = url
+    var line = (s.enabled ? "" : "!") + url
     let nets = s.networks.replacingOccurrences(of: " ", with: "")
     if !nets.isEmpty { line += " \(nets)" }
     // "#" would start a new alias when the line is read back
@@ -234,6 +239,33 @@ func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
         return String(line[r.upperBound..<end.lowerBound])
     }
     return nil
+}
+
+// SMB shares in the output of `mount -t smbfs` that are not configured yet, as proposals
+// for shares.conf. "//[domain;]user[:password]@server/share on /Volumes/x (smbfs, ...)";
+// a password never goes into the address.
+func importProposals(_ mountOutput: String, configured: [Share]) -> [(share: Share, mountPoint: String)] {
+    var known = Set(configured.map(\.hostShare))
+    var out: [(share: Share, mountPoint: String)] = []
+    for line in mountOutput.split(separator: "\n") {
+        guard line.hasPrefix("//"), let on = line.range(of: " on "),
+              let end = line.range(of: " (smbfs", options: .backwards), on.upperBound <= end.lowerBound
+        else { continue }
+        var addr = String(line[line.index(line.startIndex, offsetBy: 2)..<on.lowerBound])
+        if let at = addr.firstIndex(of: "@") {
+            let user = addr[..<at].split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)[0]
+            addr = (user.isEmpty ? "" : "\(user)@") + addr[addr.index(after: at)...]
+        }
+        let share = Share(url: "smb://" + addr, networks: "")
+        guard share.isValid, known.insert(share.hostShare).inserted else { continue }
+        out.append((share, String(line[on.upperBound..<end.lowerBound])))
+    }
+    return out
+}
+
+// "192.168.10.20" → "192.168.10."
+func prefix24(_ ip: String) -> String {
+    ip.split(separator: ".").prefix(3).joined(separator: ".") + "."
 }
 
 // Team ID of a package signed with a Developer ID Installer certificate, read from the

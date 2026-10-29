@@ -146,6 +146,18 @@ setup 'smb://fileserver.example.com/team 192.168.1. # Team Drive\n' 'fileserver.
 runit
 expect "alias after networks, wrong network → unmount" 'diskutil unmount /Volumes/team'
 
+setup '!smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
+runit
+expect "disabled share, not mounted → do nothing" 'nc|osascript|diskutil' nogrep
+
+setup '! smb://fileserver.example.com/team 192.168.1. # Team\n' '' "$M"
+runit
+expect "disabled share, mounted, wrong network, unreachable → leave it" 'nc|osascript|diskutil|umount' nogrep
+
+setup '!smb://a.example/x\nsmb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
+runit
+expect "disabled share does not stop the others" 'osascript -e mount volume "smb://fileserver.example.com/team"'
+
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 touch "$T/home/.config/mountwell/disabled"
 runit
