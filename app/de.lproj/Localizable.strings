@@ -121,3 +121,14 @@
 "Starting at login" = "Start beim Anmelden";
 "Optional name for a share, e.g. **Photos at home**. The window and the menu bar show it instead of the share name. Without an alias the menu bar shows **server/share**. The folder in /Volumes keeps the share's own name." = "Optionaler Name für eine Freigabe, z.B. **Fotos zu Hause**. Fenster und Menüleiste zeigen ihn statt des Freigabenamens. Ohne Alias zeigt die Menüleiste **Server/Freigabe**. Der Ordner in /Volumes behält den Namen der Freigabe.";
 "**Run at Login** starts Mountwell when you log in; it then sits in the menu bar. With **Show Window at Login**, the window opens as well. Both are in the menu bar menu and in **Mountwell → Settings** (⌘,). The background service mounts your shares even when Mountwell is not running." = "**Beim Anmelden starten** startet Mountwell, wenn du dich anmeldest; es sitzt dann in der Menüleiste. Mit **Fenster beim Anmelden zeigen** öffnet sich zusätzlich das Fenster. Beides findest du im Menüleisten-Menü und unter **Mountwell → Einstellungen …** (⌘,). Der Hintergrunddienst mountet deine Freigaben auch, wenn Mountwell nicht läuft.";
+"Off" = "Aus";
+"Mount automatically" = "Automatisch mounten";
+"Import Mounted Shares…" = "Gemountete Freigaben importieren …";
+"Import Mounted Shares" = "Gemountete Freigaben importieren";
+"These SMB shares are mounted but not in Mountwell yet." = "Diese SMB-Freigaben sind gemountet, aber noch nicht in Mountwell.";
+"Import %lld" = "%lld importieren";
+"Nothing to Import" = "Nichts zu importieren";
+"Every mounted SMB share is already in Mountwell. Connect to a share in Finder first, then import it here." = "Alle gemounteten SMB-Freigaben sind schon in Mountwell. Verbinde dich zuerst im Finder mit einer Freigabe und importiere sie dann hier.";
+"Importing and switching off" = "Importieren und ausschalten";
+"**Import Mounted Shares…** in the menu bar menu proposes every SMB share that is mounted right now but not in Mountwell yet, for example one you connected to in Finder. Check the address, network limit and alias, then import.\n\n**Mount Automatically** in a share's context menu, its edit window or its menu bar entry turns it off without removing it: Mountwell then neither mounts nor unmounts it. **Mount** still works by hand." = "**Gemountete Freigaben importieren …** im Menüleisten-Menü schlägt jede SMB-Freigabe vor, die gerade gemountet, aber noch nicht in Mountwell ist, zum Beispiel eine, mit der du dich im Finder verbunden hast. Prüfe Adresse, Netzwerk-Einschränkung und Alias, dann importieren.\n\n**Automatisch mounten** im Kontextmenü einer Freigabe, in ihrem Bearbeiten-Fenster oder in ihrem Menüleisten-Eintrag schaltet sie aus, ohne sie zu entfernen: Mountwell mountet sie dann weder noch hängt es sie aus. **Mounten** von Hand geht weiterhin.";
+"Checking the server or mounting" = "Server wird geprüft oder Freigabe gemountet";

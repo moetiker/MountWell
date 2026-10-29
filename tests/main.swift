@@ -50,6 +50,15 @@ check(shareLine(Share(url: "smb://srv/team", networks: "", alias: "A#B")), "smb:
 check(shareLine(Share(url: " ", networks: "")), nil, "write: empty url skipped")
 let round = Share(url: "smb://srv/team", networks: "10.46.", alias: "Team Drive")
 check(parseShareLine(shareLine(round)!)?.alias, "Team Drive", "write and read back")
+check(parseShareLine("smb://srv/team")?.enabled, true, "line: enabled by default")
+let off = parseShareLine("!smb://srv/team 10.46. # Team Drive")
+check(off?.enabled, false, "line: ! disables")
+check(off?.url, "smb://srv/team", "line: url after !")
+check(off?.networks, "10.46.", "line: networks of a disabled share")
+check(parseShareLine("! smb://srv/team")?.url, "smb://srv/team", "line: space after !")
+check(parseShareLine("!")?.url, nil, "line: ! alone")
+check(shareLine(Share(url: "smb://srv/team", networks: "", alias: "T", enabled: false)), "!smb://srv/team # T", "write: disabled")
+check(parseShareLine(shareLine(Share(url: "smb://srv/team", networks: "", enabled: false))!)?.enabled, false, "write and read back disabled")
 check(Share(url: "smb://srv/share/sub/dir", networks: "").hostShare, "srv/share/sub/dir", "subdirectory")
 
 check(Share(url: "smb://", networks: "").isValid, false, "scheme only is invalid")
@@ -108,6 +117,25 @@ check(mountPoint(of: "FileServer.Example.com/Team", in: mountOut), "/Volumes/tea
 check(mountPoint(of: "fileserver.example.com/my%20files", in: mountOut), "/Volumes/My Files", "mount point with space")
 check(mountPoint(of: "srv.example/share", in: mountOut), nil, "similar name is not a mount point")
 check(mountPoint(of: "example.com/team", in: mountOut), nil, "host suffix is not a match")
+
+// Import proposals from `mount -t smbfs`
+let importOut = """
+    //anna@fileserver.example.com/team on /Volumes/team (smbfs, nodev, nosuid, mounted by anna)
+    //anna@FileServer.example.com/Photos on /Volumes/Photos (smbfs, nodev, nosuid, mounted by anna)
+    //GUEST:@192.168.10.20/public on /Volumes/public (smbfs, nodev, nosuid, mounted by anna)
+    //anna:secret@nas.example.com/My%20Files on /Volumes/My Files (smbfs, nodev, nosuid, mounted by anna)
+    //nas.example.com/media on /Volumes/media (smbfs, nodev, nosuid, mounted by anna)
+    //anna@fileserver.example.com/team on /Volumes/team-1 (smbfs, nodev, nosuid, mounted by anna)
+    map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)
+    """
+let props = importProposals(importOut, configured: [Share(url: "smb://fileserver.example.com/photos", networks: "")])
+check(props.map(\.share.url), ["smb://anna@fileserver.example.com/team", "smb://GUEST@192.168.10.20/public",
+                               "smb://anna@nas.example.com/My%20Files", "smb://nas.example.com/media"],
+      "import: configured (any case) and duplicate mounts skipped")
+check(props.map(\.mountPoint), ["/Volumes/team", "/Volumes/public", "/Volumes/My Files", "/Volumes/media"], "import: mount points")
+check(props.allSatisfy { $0.share.networks.isEmpty }, true, "import: no network limit, also for a private IP")
+check(props.allSatisfy { !$0.share.url.contains("secret") }, true, "import: password dropped")
+check(importProposals("", configured: []).count, 0, "import: nothing mounted")
 
 // Version comparison
 check(isNewer("1.1", than: "1.0"), true, "1.1 > 1.0")

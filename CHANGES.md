@@ -12,8 +12,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
+- "Import Mounted Shares…" in the menu bar menu proposes the SMB shares that are mounted right now but not in Mountwell yet.
+- A spinner on a share's icon shows while Mountwell mounts or ejects it, or takes a while to reach its server.
+- "Mount Automatically" per share (context menu, edit window, menu bar) turns a share off without removing it; Mountwell then neither mounts nor unmounts it.
 
 ### Changed
+- With no window open, Mountwell checks the state once a minute instead of every 10 seconds, and it no longer checks the servers of mounted shares.
 
 ### Fixed
 
