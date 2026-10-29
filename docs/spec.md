@@ -1,164 +1,139 @@
 # Mountwell specification
 
-What Mountwell must do. Requirements are numbered so issues, commits and tests can refer
-to them (for example "M-4"). The reasons behind individual decisions are in
-`docs/maintainer-notes.md`; how to work on the code is in `docs/programming-guide.md`.
+What Mountwell must do. Issues, commits and tests refer to the numbers (for example
+"M-4"). Reasons are in `docs/maintainer-notes.md`.
 
 ## 1. Purpose
 
-Mountwell mounts SMB shares on macOS while their file server is reachable and unmounts
-them when it is not. A user who moves between the office network, VPN, home and other
-networks never sees Finder hang on a dead share and never mounts drives by hand.
+Mountwell mounts SMB shares on macOS 14 or later while their server is reachable and
+unmounts them when it is not, so Finder never hangs on a dead share.
 
-**Users:** people on macOS 14 or later who use SMB shares from one or more file servers
-that are only reachable in certain networks.
-
-**Out of scope:** other protocols (AFP, NFS, WebDAV), storing or managing passwords
-(macOS keychain does that), server-side configuration, the Mac App Store.
+Out of scope: AFP, NFS, WebDAV, password management (the keychain does that), server
+configuration, the Mac App Store.
 
 ## 2. Mounting (background service)
 
-- **M-1** A per-user background service runs on every network change, every 60 seconds
-  and once at login, for every logged-in user, whether or not the app is running.
-- **M-2** For each configured share: if the server answers on TCP port 445 and the share is
-  not mounted, mount it with the password from the user's keychain, without a dialog.
-- **M-3** If a mounted share's server does not answer three times, 5 seconds apart, unmount
-  it with force. A single failed attempt must not unmount a share.
-- **M-4** A share may be restricted to networks, given as IP prefixes. It is mounted only
-  while one of the Mac's own IPv4 addresses starts with one of the prefixes.
-- **M-5** In a network that does not match M-4, a mounted share is unmounted without force
-  while its server still answers. If that fails (open files), it stays mounted and the
-  failure is logged; the next run tries again. If the server does not answer, unmount with
-  force.
-- **M-6** A share ejected by hand in the app (A-6) is not mounted again until it is mounted
-  again (by the app, Finder or by hand) or its server is out of reach or the network does
-  not match M-4. Then the eject is forgotten and M-2 applies again.
-- **M-7** A share counts as mounted only if the mount table lists exactly its
-  `server/share`, compared case-insensitively. `example.com/x` must not match
-  `fileserver.example.com/x`, and `share` must not match `share-old`.
-- **M-8** When automatic mounting is switched off (A-3), the service does nothing.
-- **M-9** Without a configuration the service does nothing and exits successfully.
-- **M-10** Every mount, unmount and failure is logged with a timestamp to
-  `~/Library/Logs/mountwell.log`, in English. Runs without an action log nothing.
-- **M-11** After a network change the service waits 3 seconds before checking, so DHCP and
-  DNS can settle. Runs started from the app skip the wait.
+- **M-1** A per-user service runs at login, on every network change and every 60 seconds,
+  whether the app runs or not.
+- **M-2** A configured share whose server answers on TCP 445 is mounted with the keychain
+  password, without a dialog.
+- **M-3** A mounted share whose server fails three checks 5 seconds apart is unmounted with
+  force. One failed check does nothing.
+- **M-4** A share may be limited to IP prefixes. It is mounted only while one of the Mac's
+  IPv4 addresses starts with one of them.
+- **M-5** Outside those networks a mounted share is unmounted without force while its
+  server answers; if files are open it stays and the next run retries. If the server does
+  not answer, unmount with force.
+- **M-6** A share ejected in the app (A-6) is not remounted until it is mounted again by
+  any means, its server is unreachable or the network does not match M-4.
+- **M-7** A share is mounted only if the mount table lists exactly its `server/share`,
+  case-insensitive. `example.com/x` does not match `fileserver.example.com/x`, `share`
+  does not match `share-old`.
+- **M-8** With automatic mounting off (A-3) the service does nothing.
+- **M-9** Without a configuration the service does nothing and exits 0.
+- **M-10** Mounts, unmounts and failures are logged with a timestamp, in English, to
+  `~/Library/Logs/mountwell.log`. Runs without an action log nothing.
+- **M-11** After a network change the service waits 3 seconds. Runs from the app do not.
 
 ## 3. Configuration
 
-- **C-1** Per user, in `~/.config/mountwell/shares.conf`, one share per line:
-  `smb://[user@]server/share [prefix,prefix,…]`. Blank lines and lines starting with `#`
-  are ignored. The file stays editable by hand.
+- **C-1** `~/.config/mountwell/shares.conf`, one share per line:
+  `smb://[user@]server/share [prefix,prefix,…] [# alias]`. Blank lines and lines
+  starting with `#` are ignored. The service ignores the alias.
 - **C-2** `~/.config/mountwell/disabled` exists ⇔ automatic mounting is off.
-- **C-3** `~/.config/mountwell/ejected` lists shares ejected by hand, one `server/share` per
-  line in lower case. The app adds entries, the service removes them (M-6).
-- **C-4** On first run, configuration and log of the predecessor "SMB Automount"
-  (`~/.config/smb-automount`, `~/Library/Logs/smb-automount.log`) are moved over, unless
-  Mountwell's own already exist.
+- **C-3** `~/.config/mountwell/ejected` lists ejected shares, one lower-case
+  `server/share` per line. The app adds, the service removes (M-6).
+- **C-4** Configuration and log of the predecessor "SMB Automount" are moved over unless
+  Mountwell's already exist.
 
 ## 4. App
 
-- **A-1** The main window lists the shares with name, server, status (mounted, reachable,
-  unreachable, ejected, checking) and network restrictions. Status refreshes every 10
-  seconds.
-- **A-2** Shares can be added, edited and removed. Removing asks for confirmation; a
-  mounted share stays mounted. Saving writes the configuration and runs a check at once.
-- **A-3** A switch turns automatic mounting on and off for the current user.
-- **A-4** While an address is edited, the app checks it and helps with: wrong format
-  (offers to convert `\\server\share` and `server/share`), names that do not resolve,
-  short names without a domain (suggests the full name using the Mac's search domain),
-  `.local` names, IP addresses (offers the DNS name from a reverse lookup), private IPs
-  without a network restriction (offers the /24 prefix), and whether port 445 answers. The
-  check must not block typing.
-- **A-5** A button per share opens the share in Finder, so the user can save the password
-  in the keychain once.
-- **A-6** A mounted share can be ejected from its card, its context menu and the menu bar.
-  The eject is recorded (C-3) before unmounting without force. If unmounting fails, the
-  record is removed and the user is told that files may be open.
-- **A-7** A reachable, unmounted share can be mounted right away, also when automatic
-  mounting is off. This forgets an earlier eject.
-- **A-8** The window shows whether the background service is loaded and can load it.
-- **A-9** The window is exactly as tall as the share list needs, for up to four shares;
-  with more, the list scrolls. A log panel (latest 50 entries, newest first) opens and
-  closes like a drawer via View → Show Log (⌘L); the window grows and shrinks with it.
-  The setting is remembered.
-- **A-10** A menu bar icon shows the overall state and offers, per share, Show in Finder,
-  Eject or Mount, plus Mount Automatically, Check Now, Open Mountwell, Open at Login,
+- **A-1** The window lists shares with name, server, status (mounted, reachable,
+  unreachable, ejected, checking) and network limits, refreshed every 10 seconds.
+- **A-2** Shares can be added, edited and removed (with confirmation; a mounted share stays
+  mounted). Saving writes the configuration and checks at once.
+- **A-3** A switch turns automatic mounting on and off.
+- **A-4** While an address is typed, the app checks it without blocking and helps with:
+  wrong format (converts `\\server\share` and `server/share`), unresolvable names, short
+  names (suggests the search domain), `.local` names, IP addresses (suggests the DNS
+  name), private IPs without a limit (suggests the /24) and whether port 445 answers.
+- **A-5** A button opens the share in Finder, to save the password in the keychain once.
+- **A-6** A mounted share can be ejected from its card, context menu and the menu bar. The
+  eject is recorded (C-3), then unmounted without force; on failure the record is removed
+  and the user is told files may be open.
+- **A-7** A reachable share can be mounted at once, also with automatic mounting off. This
+  forgets an earlier eject.
+- **A-8** The window shows whether the service is loaded and can load it.
+- **A-9** The window fits up to four shares, then scrolls. A log drawer (latest 50
+  entries, newest first) opens with View → Show Log (⌘L) and is remembered.
+- **A-10** A menu bar icon shows the overall state. Its menu lists each share by its alias,
+  or else as `server/share`, and offers per share Show in Finder, Eject or Mount, plus
+  Mount Automatically, Check Now, Open Mountwell, Run at Login, Show Window at Login,
   Check for Updates and Quit.
-- **A-11** Closing the window removes the Dock icon; the menu bar icon stays. Opening the
-  app again brings the window back. Started as a login item, the app shows no window.
-- **A-12** Help (⌘?) explains the address format, DNS names vs. IP addresses,
-  troubleshooting, network restrictions, ejecting and the keychain.
-- **A-13** Only one main window exists.
-- **A-14** Liquid Glass on macOS 26, material effects on macOS 14/15; light and dark mode.
+- **A-11** Closing the window removes the Dock icon; the menu bar icon stays. Started as
+  a login item, the app shows no window unless Show Window at Login is on or no share is
+  configured yet. Started by hand, it always shows the window.
+- **A-12** Help (⌘?) covers address format, DNS names vs. IPs, troubleshooting, network
+  limits, ejecting and the keychain.
+- **A-13** There is only one main window.
+- **A-14** Liquid Glass on macOS 26, materials on macOS 14 and 15; light and dark mode.
+- **A-15** Settings (⌘,) and the menu bar menu offer Run at Login (start the app at
+  login) and Show Window at Login (off by default; only with Run at Login).
+- **A-16** A share may have an alias (C-1). Window and menu show it instead of the share
+  name; the card then shows `server/share` below it.
 
 ## 5. Language
 
-- **L-1** The UI appears in the language the Mac is set to: English (development language)
-  or German. Every visible text, including hints, tags, dialogs, menus, help and the
-  local network permission prompt, is translated.
-- **L-2** Everything else is English: code, comments, log, scripts, tests, documentation,
-  commit messages, release notes, the GitHub repository.
+- **L-1** The UI follows the Mac's language: English or German. Every visible text is
+  translated, including the local network prompt.
+- **L-2** Everything else is English: code, log, tests, docs, commits, releases.
 
 ## 6. Installation and removal
 
-- **I-1** Distribution is an installer package for macOS 14 or later, Universal (Apple
-  silicon and Intel), installing `/Applications/Mountwell.app` and a system-wide
-  LaunchAgent `ch.oetiker.mountwell`.
+- **I-1** A Universal installer package for macOS 14 or later installs
+  `/Applications/Mountwell.app` and the system-wide LaunchAgent `ch.oetiker.mountwell`.
 - **I-2** Installing loads the service for all logged-in users and opens the app for users
   without a configuration.
-- **I-3** Installing over a running Mountwell quits it first and relaunches it afterwards.
-- **I-4** Installing removes the predecessor SMB Automount (system-wide and single-user
-  variants) and takes over its configuration (C-4).
-- **I-5** An uninstaller in the app bundle removes app and service and keeps the
+- **I-3** Installing over a running app quits and relaunches it.
+- **I-4** Installing removes SMB Automount and takes over its configuration (C-4).
+- **I-5** An uninstaller in the app bundle removes app and service, keeps the
   configuration.
-- **I-6** In System Settings → Login Items the service appears as Mountwell.
+- **I-6** Login Items in System Settings show the service as Mountwell.
 
 ## 7. Updates
 
-- **U-1** At launch and then every 24 hours, the app checks the latest release of the
-  GitHub repository built into the app. A check from the menu also reports "up to date"
-  and errors; automatic checks stay silent unless there is an update.
-- **U-2** A release counts as an update if its version (the tag without a leading `v`) is
-  numerically newer than the installed one and it has a `.pkg` asset.
-- **U-3** An available update is shown in the menu bar and the window's status bar. The
-  user confirms in a dialog showing version and release notes; nothing installs
-  without that confirmation and the administrator password.
-- **U-4** The package is downloaded over HTTPS to the user's cache under a fixed name and
-  opened in Installer. It is trusted because it comes from the GitHub repository; there
-  is no signature check (see section 9).
+- **U-1** The app checks the latest GitHub release at launch and every 24 hours. Automatic
+  checks stay silent unless there is an update.
+- **U-2** A release is an update if its tag (without `v`) is numerically newer and it has a
+  `.pkg` asset.
+- **U-3** The update shows in the menu bar and status bar. It installs only after the user
+  confirms the dialog (version, notes) and enters the administrator password.
+- **U-4** The package is downloaded over HTTPS under a fixed name and opened in Installer.
+  If the app was built with a team ID (`TEAM_ID`), the package must carry a trusted
+  Developer ID Installer signature of that team, or it is deleted and not installed.
 
 ## 8. Build, CI and release
 
-- **B-1** `./build.sh` runs all tests and, only if they pass, builds the Universal app and
-  the package. `VERSION` and `REPO` can be set from the environment.
-- **B-2** GitHub Actions tests and builds every pull request and every push to `main` on a
-  macOS 26 runner (`ci.yml` calling `ci-local.yml`) and attaches the package to the run.
-  The required check `ci-passed` sums it up.
-- **B-3** A release starts with the workflow *Create release PR* (bugfix, feature or
-  major). It takes the next version from the tags, moves the `[Unreleased]` section of
-  `CHANGES.md` under that version, writes it to `VERSION`, builds and tests the release
-  branch and opens a pull request. Merging it tags the release and publishes it on GitHub
-  with the package; the `CHANGES.md` section is the release notes.
-- **B-6** `main` is protected: changes land through pull requests with a green
-  `ci-passed` and an entry in `CHANGES.md` (`changelog-updated`), or the label
-  `no-changelog` for changes users do not notice.
-- **B-7** The setup follows the repo-infra standard (`oposs/repo-infra`, `@v2`);
-  `repo_infra check` reports any drift.
-- **B-4** The repository is public and is released under the MIT license, which also ships
-  inside the app bundle.
-- **B-5** Nothing in the repository identifies the author's systems or networks; examples
-  use `example.com` and documentation addresses.
+- **B-1** `./build.sh` runs the tests and only then builds app and package. `VERSION`,
+  `REPO` and `TEAM_ID` can come from the environment.
+- **B-2** Every pull request and push to `main` is tested and built on `macos-26`;
+  `ci-passed` sums it up.
+- **B-3** *Create release PR* bumps `VERSION`, moves `[Unreleased]` in `CHANGES.md` under
+  the new version and opens a pull request. Merging it tags and publishes the release
+  with the package and that section as notes.
+- **B-4** The repository is public, MIT licensed; the license ships in the app.
+- **B-5** Nothing in the repository identifies the author's systems or networks.
+- **B-6** `main` takes pull requests with green `ci-passed` and a `CHANGES.md` entry or
+  the label `no-changelog`.
+- **B-7** The setup follows the repo-infra standard; `repo_infra check` reports drift.
+- **B-8** With Developer ID certificates in the keychain, `./build.sh` signs the app
+  (hardened runtime) and the package, notarizes and staples it, and sets `TEAM_ID` from
+  the installer certificate. Without them it builds unsigned. A release build with the
+  signing secrets fails rather than ship an unsigned package.
 
-## 9. Non-goals and known limits
+## 9. Known limits
 
-- The package and app are not signed with a Developer ID and not notarized. The first
-  installation of a downloaded package needs "Open Anyway". Signing is a separate,
-  optional step (needs an Apple Developer Program membership).
-- Ejecting in Finder alone is not remembered; the service mounts the share again (M-6
-  covers ejecting from the app only).
-- Hanging DNS lookups are not bounded by the 2-second connection timeout.
+- An unsigned build (no Developer ID certificates) needs "Open Anyway" the first time.
+- An eject in Finder is not remembered; the service mounts the share again.
+- Hanging DNS lookups are not bounded by the 2-second timeout.
 - The UI is not tested automatically.
-
-## 10. Open questions
-
-None. (Q-1, the release notes, is settled by B-3: they come from `CHANGES.md`.)

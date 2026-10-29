@@ -27,6 +27,29 @@ check(u.host, "fileserver.example.com", "host without user")
 check(u.name, "Photos", "name keeps its case")
 
 check(Share(url: "smb://srv/My%20Files", networks: "").name, "My Files", "name decodes %20")
+
+// Alias and shares.conf lines
+check(s.title, "team", "title without alias is the share name")
+check(Share(url: "smb://srv/team", networks: "", alias: "Team Drive").title, "Team Drive", "title is the alias")
+check(Share(url: "smb://srv/team", networks: "", alias: "  ").title, "team", "blank alias is ignored")
+check(Share(url: "smb://anna@Srv.example.com/Team", networks: "").menuTitle, "srv.example.com/Team", "menu title without alias: server/share")
+check(Share(url: "smb://srv/team", networks: "", alias: "Team Drive").menuTitle, "Team Drive", "menu title with alias")
+let a = parseShareLine("smb://srv/team 10.46.,192.168.1. # Team Drive")
+check(a?.url, "smb://srv/team", "line: url")
+check(a?.networks, "10.46.,192.168.1.", "line: networks before alias")
+check(a?.alias, "Team Drive", "line: alias with space")
+let b = parseShareLine("smb://srv/team #Team")
+check(b?.networks, "", "line: alias without networks")
+check(b?.alias, "Team", "line: alias without space after #")
+check(parseShareLine("smb://srv/team 10.46.")?.alias, "", "line: no alias")
+check(parseShareLine("# comment")?.url, nil, "line: comment")
+check(parseShareLine("   ")?.url, nil, "line: blank")
+check(shareLine(Share(url: "smb://srv/team", networks: "10.46.", alias: "Team Drive")),
+      "smb://srv/team 10.46. # Team Drive", "write: networks and alias")
+check(shareLine(Share(url: "smb://srv/team", networks: "", alias: "A#B")), "smb://srv/team # AB", "write: # dropped from alias")
+check(shareLine(Share(url: " ", networks: "")), nil, "write: empty url skipped")
+let round = Share(url: "smb://srv/team", networks: "10.46.", alias: "Team Drive")
+check(parseShareLine(shareLine(round)!)?.alias, "Team Drive", "write and read back")
 check(Share(url: "smb://srv/share/sub/dir", networks: "").hostShare, "srv/share/sub/dir", "subdirectory")
 
 check(Share(url: "smb://", networks: "").isValid, false, "scheme only is invalid")
@@ -107,6 +130,46 @@ check(rel?.pkgURL.absoluteString, "https://x/Mountwell-1.2.pkg", "release: .pkg 
 check(rel?.notes, "New: updates", "release: notes")
 check(parseRelease(Data(#"{"tag_name": "v1.3", "assets": []}"#.utf8)), nil, "ignore release without .pkg")
 check(parseRelease(Data("no json".utf8)), nil, "invalid response")
+
+// Update signature (pkgutil --check-signature output)
+func sigOutput(status: String, leaf: String) -> String {
+    """
+    Package "Mountwell-Update.pkg":
+       Status: \(status)
+       Notarization: trusted by the Apple notary service
+       Signed with a trusted timestamp on: 2026-10-29 10:00:00 +0000
+       Certificate Chain:
+        1. \(leaf)
+           Expires: 2031-10-29 10:00:00 +0000
+           SHA256 Fingerprint:
+               00 11 22 33
+           ------------------------------------------------------------------------
+        2. Developer ID Certification Authority
+           Expires: 2031-09-17 00:00:00 +0000
+           ------------------------------------------------------------------------
+        3. Apple Root CA
+           Expires: 2035-02-09 21:40:36 +0000
+
+    """
+}
+let distribution = "signed by a developer certificate issued by Apple for distribution"
+check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Installer: Jane Example (AB12CD34EF)")),
+      "AB12CD34EF", "signature: team ID of Developer ID Installer")
+check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Installer: Name (With Brackets) (AB12CD34EF)")),
+      "AB12CD34EF", "signature: last brackets hold the team ID")
+check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Application: Jane Example (AB12CD34EF)")),
+      nil, "signature: application certificate is not an installer signature")
+check(installerTeamID(sigOutput(status: "signed by a certificate trusted by Mac OS X", leaf: "Developer ID Installer: Jane Example (AB12CD34EF)")),
+      nil, "signature: other status")
+check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Installer: Apple Inc. - XQuartz")),
+      nil, "signature: old certificate without team ID")
+check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Installer: Jane Example (ab12cd34ef)")),
+      nil, "signature: team ID must be upper case")
+check(installerTeamID("Package \"Mountwell-0.0.3.pkg\":\n   Status: no signature\n"), nil, "signature: unsigned")
+check(isTeamID("AB12CD34EF"), true, "team ID valid")
+check(isTeamID("@TEAM_ID@"), false, "team ID placeholder")
+check(isTeamID(""), false, "team ID empty")
+check(isTeamID("AB12CD34E"), false, "team ID too short")
 
 // Release notes as plain text
 check(plainNotes("### Fixed\n- `example.com` is **no** match\n"), "Fixed:\n- example.com is no match", "notes without Markdown")

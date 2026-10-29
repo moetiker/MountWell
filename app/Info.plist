@@ -18,6 +18,7 @@
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>MountwellUpdateRepo</key><string>@REPO@</string>
+    <key>MountwellTeamID</key><string>@TEAM_ID@</string>
     <key>NSLocalNetworkUsageDescription</key><string>Mountwell checks whether the servers of your shares respond on the local network.</string>
 </dict>
 </plist>

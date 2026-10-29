@@ -134,6 +134,18 @@ setup 'smb://fileserver.example.com/team 192.168.1.,10.46.\n' 'fileserver.exampl
 runit
 expect "matching network (second prefix) → mount" 'osascript -e mount volume'
 
+setup 'smb://fileserver.example.com/team # Team Drive\n' 'fileserver.example.com\n' ''
+runit
+expect "alias without networks → mount" 'osascript -e mount volume "smb://fileserver.example.com/team"'
+
+setup 'smb://fileserver.example.com/team 10.46. # Team Drive\n' 'fileserver.example.com\n' ''
+runit
+expect "alias after networks → mount" 'osascript -e mount volume "smb://fileserver.example.com/team"'
+
+setup 'smb://fileserver.example.com/team 192.168.1. # Team Drive\n' 'fileserver.example.com\n' "$M"
+runit
+expect "alias after networks, wrong network → unmount" 'diskutil unmount /Volumes/team'
+
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 touch "$T/home/.config/mountwell/disabled"
 runit

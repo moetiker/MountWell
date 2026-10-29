@@ -22,6 +22,9 @@ let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionS
     ?? ProcessInfo.processInfo.environment["MOUNTWELL_VERSION"] ?? "dev"
 // "owner/repo" on GitHub, filled in by build.sh
 let updateRepo = (Bundle.main.object(forInfoDictionaryKey: "MountwellUpdateRepo") as? String).flatMap { $0.contains("/") ? $0 : nil }
+// Apple team whose Developer ID must have signed an update, filled in by build.sh;
+// empty for builds without one, which then install updates unchecked
+let updateTeamID = (Bundle.main.object(forInfoDictionaryKey: "MountwellTeamID") as? String).flatMap { isTeamID($0) ? $0 : nil }
 
 @MainActor
 final class Model: ObservableObject {
@@ -59,27 +62,18 @@ final class Model: ObservableObject {
 
     func load() {
         let text = (try? String(contentsOf: configFile, encoding: .utf8)) ?? ""
-        shares = text.split(separator: "\n").compactMap { line in
-            let t = line.trimmingCharacters(in: .whitespaces)
-            guard !t.isEmpty, !t.hasPrefix("#") else { return nil }
-            let parts = t.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
-            let nets = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
-            return Share(url: String(parts[0]), networks: nets)
-        }
+        shares = text.split(separator: "\n").compactMap { parseShareLine(String($0)) }
         enabled = !FileManager.default.fileExists(atPath: disabledFile.path)
     }
 
     func save() {
         var text = """
-            # smb://[user@]server/share   [optional IP prefixes, comma-separated]
+            # smb://[user@]server/share   [optional IP prefixes, comma-separated]   [# optional alias]
             # Managed by Mountwell.app
 
             """
         for s in shares {
-            let url = s.url.trimmingCharacters(in: .whitespaces)
-            guard !url.isEmpty else { continue }
-            let nets = s.networks.replacingOccurrences(of: " ", with: "")
-            text += nets.isEmpty ? "\(url)\n" : "\(url) \(nets)\n"
+            if let line = shareLine(s) { text += line + "\n" }
         }
         try? FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
         try? text.write(to: configFile, atomically: true, encoding: .utf8)
@@ -132,7 +126,7 @@ final class Model: ObservableObject {
                 self.busy = false
                 if result.status != 0 {
                     self.setEjected(s, false)
-                    showAlert(String(localized: "“\(s.name)” could not be ejected"),
+                    showAlert(String(localized: "“\(s.title)” could not be ejected"),
                               String(localized: "Files on it may still be open. Close them and try again."))
                 }
                 self.refresh()
@@ -307,6 +301,15 @@ final class Updater: ObservableObject {
             let pkg = dir.appendingPathComponent("Mountwell-Update.pkg")
             try? FileManager.default.removeItem(at: pkg)
             try FileManager.default.moveItem(at: tmp, to: pkg)
+            // whoever can publish a release could otherwise ship code that runs as root
+            if let team = updateTeamID {
+                let path = pkg.path
+                let r = await Task.detached { run("/usr/sbin/pkgutil", ["--check-signature", path]) }.value
+                guard r.status == 0, installerTeamID(r.output) == team else {
+                    try? FileManager.default.removeItem(at: pkg)
+                    throw UpdateError(String(localized: "The package is not signed by the developer of Mountwell. It was deleted and not installed."))
+                }
+            }
             NSWorkspace.shared.open(pkg)
         } catch {
             info(String(localized: "Update Failed"), error.localizedDescription)
@@ -415,8 +418,10 @@ struct ShareCard: View {
                 .shadow(color: state.color.opacity(0.35), radius: 6, y: 2)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(share.name).font(.headline)
-                Text(share.host).font(.subheadline).foregroundStyle(.secondary)
+                Text(share.title).font(.headline)
+                // with an alias the real share name stays visible next to the server
+                Text(verbatim: share.title == share.name ? share.host : "\(share.host)/\(share.name)")
+                    .font(.subheadline).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
                     Tag(text: state.text, color: state.color)
@@ -723,7 +728,7 @@ struct ContentView: View {
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             presenting: deleting
         ) { share in
-            Button("Remove “\(share.name)”", role: .destructive) { m.delete(share) }
+            Button("Remove “\(share.title)”", role: .destructive) { m.delete(share) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("It will no longer be mounted automatically. If it is mounted right now, it stays mounted until you eject it in Finder.")
@@ -806,6 +811,7 @@ struct ShareEditor: View {
                 Section {
                     TextField("Address", text: $share.url, prompt: Text(verbatim: "smb://server/share"))
                     TextField("Only in networks", text: $share.networks, prompt: Text("optional, e.g. 10.46.,192.168.1."))
+                    TextField("Alias", text: $share.alias, prompt: Text("optional, shown instead of the share name"))
                 }
                 Section("Check") {
                     VStack(alignment: .leading, spacing: 10) {
@@ -958,11 +964,17 @@ struct HelpView: View {
                 section("Only in networks", "line.3.horizontal.decrease.circle", """
                     Optional, comma-separated, e.g. **10.46.,192.168.1.**: the share is then only mounted when one of your own IP addresses starts with one of these prefixes. Leave it empty to always mount when the server is reachable. For servers with a DNS name and an internal address, this is usually not needed.
                     """)
+                section("Alias", "tag", """
+                    Optional name for a share, e.g. **Photos at home**. The window and the menu bar show it instead of the share name. Without an alias the menu bar shows **server/share**. The folder in /Volumes keeps the share's own name.
+                    """)
                 section("Ejecting", "eject", """
                     Use the **eject button** on a share, or its entry in the menu bar, to unmount it by hand. Mountwell then leaves it alone until you mount it again or the server goes out of reach, e.g. when you leave the office network. Ejecting in Finder does not work for this: the background service mounts the share again within a minute.
                     """)
                 section("Password", "key", """
                     The background service takes the password from the keychain. So connect once per share with the **link button** and choose **“Remember this password in my keychain”** in the Finder dialog.
+                    """)
+                section("Starting at login", "power", """
+                    **Run at Login** starts Mountwell when you log in; it then sits in the menu bar. With **Show Window at Login**, the window opens as well. Both are in the menu bar menu and in **Mountwell → Settings** (⌘,). The background service mounts your shares even when Mountwell is not running.
                     """)
                 section("Troubleshooting", "stethoscope", """
                     • The log shows every mount and unmount. Show it via **View → Show Log** (⌘L).
@@ -1036,6 +1048,43 @@ struct AppCommands: Commands {
 
 // MARK: - Menu bar
 
+// started as login item: open the window too? Off by default, the app then sits in the menu bar
+let showWindowAtLoginKey = "showWindowAtLogin"
+
+// "Run at Login" and "Show Window at Login", in the menu bar menu and in Settings
+struct LoginToggles: View {
+    @ObservedObject var m: Model
+    @AppStorage(showWindowAtLoginKey) private var showWindowAtLogin = false
+
+    var body: some View {
+        Toggle("Run at Login", isOn: Binding(get: { m.launchAtLogin }, set: { m.setLaunchAtLogin($0) }))
+        Toggle("Show Window at Login", isOn: $showWindowAtLogin)
+            .disabled(!m.launchAtLogin)
+    }
+}
+
+struct SettingsView: View {
+    @ObservedObject var m: Model
+
+    var body: some View {
+        Form {
+            Section {
+                LoginToggles(m: m)
+            }
+        }
+        .formStyle(.grouped)
+        .toggleStyle(.switch)
+        .frame(width: 380)
+        .fixedSize()
+    }
+}
+
+// whether shares.conf lists at least one share
+func hasShares() -> Bool {
+    let text = (try? String(contentsOf: configFile, encoding: .utf8)) ?? ""
+    return text.split(separator: "\n").contains { parseShareLine(String($0)) != nil }
+}
+
 // Show a window; without a window the app has no Dock icon (see AppDelegate)
 @MainActor
 func showWindow(_ id: String, _ openWindow: OpenWindowAction) {
@@ -1059,20 +1108,7 @@ struct MenuBarMenu: View {
             Text("No Shares")
         }
         ForEach(m.shares) { share in
-            let reachable = m.reachable[share.host] == true
-            let icon = m.isMounted(share) ? "checkmark.circle.fill"
-                : m.isEjected(share) ? "eject.circle" : reachable ? "circle" : "xmark.circle"
-            Menu {
-                if let mp = m.mountPoints[share.hostShare] {
-                    Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: mp)) }
-                    Button("Eject") { m.eject(share) }
-                } else {
-                    Button("Mount") { m.mount(share) }
-                        .disabled(!reachable)
-                }
-            } label: {
-                Label(share.name, systemImage: icon)
-            }
+            shareMenu(share)
         }
         Divider()
         Toggle("Mount Automatically", isOn: Binding(get: { m.enabled }, set: { m.setEnabled($0) }))
@@ -1080,7 +1116,7 @@ struct MenuBarMenu: View {
             .disabled(m.busy || !m.enabled)
         Divider()
         Button("Open Mountwell…") { showWindow("main", openWindow) }
-        Toggle("Open at Login", isOn: Binding(get: { m.launchAtLogin }, set: { m.setLaunchAtLogin($0) }))
+        LoginToggles(m: m)
         if updateRepo != nil {
             Button("Check for Updates…") { Task { await updater.check(manual: true) } }
                 .disabled(updater.busy)
@@ -1088,6 +1124,23 @@ struct MenuBarMenu: View {
         Divider()
         Button("Quit Mountwell") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    private func shareMenu(_ share: Share) -> some View {
+        let reachable = m.reachable[share.host] == true
+        let icon = m.isMounted(share) ? "checkmark.circle.fill"
+            : m.isEjected(share) ? "eject.circle" : reachable ? "circle" : "xmark.circle"
+        return Menu {
+            if let mp = m.mountPoints[share.hostShare] {
+                Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: mp)) }
+                Button("Eject") { m.eject(share) }
+            } else {
+                Button("Mount") { m.mount(share) }
+                    .disabled(!reachable)
+            }
+        } label: {
+            Label(share.menuTitle, systemImage: icon)
+        }
     }
 }
 
@@ -1103,9 +1156,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        // started as login item: stay quiet, no window
+        // started as login item: stay in the menu bar unless "Show Window at Login" is on.
+        // Without shares the window opens anyway, otherwise a new user sees nothing.
         let event = NSAppleEventManager.shared().currentAppleEvent
-        if event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem {
+        let asLoginItem = event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+        if asLoginItem && !UserDefaults.standard.bool(forKey: showWindowAtLoginKey) && hasShares() {
             DispatchQueue.main.async {
                 for w in NSApp.windows where w.canBecomeMain { w.close() }
             }
@@ -1143,6 +1198,10 @@ struct MountwellApp: App {
 
         MenuBarExtra("Mountwell", systemImage: m.menuBarIcon) {
             MenuBarMenu(m: m)
+        }
+
+        Settings {
+            SettingsView(m: m)
         }
     }
 }
