@@ -12,6 +12,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
+
+### Changed
+
+### Fixed
+
+## 0.3.0 - 2026-10-29
+### New
 - When a server name does not resolve, Mountwell mounts the share via the server's last known IP address. It does so only in the network where it learned the address (same address range and same router), only if the same server answers there and only once the password for that address is in the keychain. The window shows the address next to the server; right-click the share to "Connect via … in Finder" or "Forget Remembered Server".
 - A share entered by IP address is tied to its server on the first mount; a different device at the same address in another network gets no login attempt. This also happens while "Mount Automatically" is off for the share and you connect to it yourself.
 
