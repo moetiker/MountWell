@@ -142,9 +142,20 @@ struct Share: Identifiable, Equatable {
         return nil
     }
 
+    // "server/share" with the server replaced, e.g. by its remembered IP
+    func hostShare(via ip: String) -> String {
+        ip.lowercased() + hostShare.dropFirst(host.count)
+    }
+
+    // only the server part: "smb://nas@nas/x" keeps its user name, a server called "smb"
+    // keeps the scheme
     func replacingHost(with newHost: String) -> String {
-        guard let r = url.range(of: host, options: .caseInsensitive) else { return url }
-        return url.replacingCharacters(in: r, with: newHost)
+        let t = url.trimmingCharacters(in: .whitespaces)
+        guard t.lowercased().hasPrefix("smb://") else { return url }
+        var start = t.index(t.startIndex, offsetBy: 6)
+        let slash = t[start...].firstIndex(of: "/") ?? t.endIndex
+        if let at = t[start..<slash].firstIndex(of: "@") { start = t.index(after: at) }
+        return String(t[..<start]) + newHost + t[slash...]
     }
 }
 
@@ -241,11 +252,60 @@ func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
     return nil
 }
 
+// ~/.config/mountwell/servers.yaml, written by mountwell.sh: a list under "servers:" of
+// name, ip, network, router, server_id and seen, one entry per name and network.
+// Lower-case name → its IPs in file order, for entries with all fields, as the script
+// reads them.
+func parseServers(_ yaml: String) -> [String: [String]] {
+    var out: [String: [String]] = [:]
+    var entry: [String: String] = [:]
+    func flush() {
+        if let n = entry["name"], let ip = entry["ip"], isIPAddress(ip),
+           ["network", "router", "server_id"].allSatisfy({ entry[$0] != nil }) {
+            if !(out[n.lowercased()] ?? []).contains(ip) { out[n.lowercased(), default: []].append(ip) }
+        }
+        entry = [:]
+    }
+    for line in yaml.split(separator: "\n") {
+        let l = String(line)
+        let item = l.hasPrefix("  - ")
+        guard item || l.hasPrefix("    "), let colon = l.firstIndex(of: ":") else { continue }
+        if item { flush() }
+        let key = l[..<colon].trimmingCharacters(in: CharacterSet(charactersIn: " -"))
+        let value = l[l.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        entry[key] = value
+    }
+    flush()
+    return out
+}
+
+// servers.yaml without the entry of one server name
+func forgettingServer(_ name: String, in yaml: String) -> String {
+    var out: [Substring] = []
+    var skipping = false
+    for line in yaml.split(separator: "\n", omittingEmptySubsequences: false) {
+        if line.hasPrefix("  - ") {
+            let value = line.drop(while: { $0 != ":" }).dropFirst()
+                .trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            skipping = line.hasPrefix("  - name:") && value.lowercased() == name.lowercased()
+        } else if !line.hasPrefix("    ") {
+            skipping = false
+        }
+        if !skipping { out.append(line) }
+    }
+    var text = out.joined(separator: "\n")
+    // the last entry gone: the script writes an empty list the same way
+    if !text.contains("\n  - ") { text = text.replacingOccurrences(of: "\nservers:\n", with: "\nservers: []\n") }
+    return text
+}
+
 // SMB shares in the output of `mount -t smbfs` that are not configured yet, as proposals
 // for shares.conf. "//[domain;]user[:password]@server/share on /Volumes/x (smbfs, ...)";
 // a password never goes into the address.
-func importProposals(_ mountOutput: String, configured: [Share]) -> [(share: Share, mountPoint: String)] {
-    var known = Set(configured.map(\.hostShare))
+func importProposals(_ mountOutput: String, configured: [Share], servers: [String: [String]] = [:]) -> [(share: Share, mountPoint: String)] {
+    // a configured share mounted via one of its remembered IPs is not new either
+    var known = Set(configured.flatMap { s in [s.hostShare] + (servers[s.host] ?? []).map { s.hostShare(via: $0) } })
     var out: [(share: Share, mountPoint: String)] = []
     for line in mountOutput.split(separator: "\n") {
         guard line.hasPrefix("//"), let on = line.range(of: " on "),
@@ -300,4 +360,44 @@ func plainNotes(_ markdown: String) -> String {
         }
         return l.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
     }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+// MARK: - SMB server ID
+
+// SMB2 NEGOTIATE request with its NetBIOS session header. The answer carries the
+// server's ServerGuid; nothing is authenticated and no credentials are sent.
+// Offers SMB 2.0.2 to 3.1.1; 3.1.1 requires the pre-authentication integrity context.
+func smbNegotiateRequest() -> [UInt8] {
+    func le16(_ v: Int) -> [UInt8] { [UInt8(v & 0xff), UInt8(v >> 8 & 0xff)] }
+    func le32(_ v: Int) -> [UInt8] { le16(v & 0xffff) + le16(v >> 16) }
+    let dialects = [0x0202, 0x0210, 0x0300, 0x0302, 0x0311]
+    var header: [UInt8] = [0xfe, 0x53, 0x4d, 0x42] + le16(64)   // "\u{fe}SMB", StructureSize
+    header += [UInt8](repeating: 0, count: 6)                   // CreditCharge, Status
+    header += le16(0) + le16(1)                                 // NEGOTIATE, CreditRequest
+    header += [UInt8](repeating: 0, count: 64 - header.count)   // flags, ids, signature
+    let contextOffset = 112                                     // 64 + 36 + 10, 8-aligned
+    var body = le16(36) + le16(dialects.count) + le16(1) + le16(0) + le32(0)
+    body += (0..<16).map { _ in UInt8.random(in: 0...255) }     // ClientGuid
+    body += le32(contextOffset) + le16(1) + le16(0)
+    body += dialects.flatMap { le16($0) }
+    body += [UInt8](repeating: 0, count: contextOffset - 64 - body.count)
+    let salt = (0..<32).map { _ in UInt8.random(in: 0...255) }
+    let preauth = le16(1) + le16(salt.count) + le16(1) + salt   // one hash: SHA-512
+    body += le16(1) + le16(preauth.count) + le32(0) + preauth
+    let message = header + body
+    return [0, UInt8(message.count >> 16 & 0xff), UInt8(message.count >> 8 & 0xff), UInt8(message.count & 0xff)] + message
+}
+
+// ServerGuid as 32 lower-case hex digits from a NEGOTIATE response (with NetBIOS header);
+// nil for anything else, an SMB1-only server or an error status included
+func smbServerGUID(_ r: [UInt8]) -> String? {
+    guard r.count >= 4 + 64 + 24,
+          r[4..<8].elementsEqual([0xfe, 0x53, 0x4d, 0x42]),
+          r[12..<16].allSatisfy({ $0 == 0 }),                     // STATUS_SUCCESS
+          r[16] == 0, r[17] == 0,                                 // NEGOTIATE
+          r[68] == 65, r[69] == 0                                 // response StructureSize
+    else { return nil }
+    let guid = r[76..<92]
+    guard guid.contains(where: { $0 != 0 }) else { return nil }
+    return guid.map { String(format: "%02x", $0) }.joined()
 }

@@ -12,10 +12,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
+- When a server name does not resolve, Mountwell mounts the share via the server's last known IP address. It does so only in the network where it learned the address (same address range and same router), only if the same server answers there and only once the password for that address is in the keychain. The window shows the address next to the server; right-click the share to "Connect via … in Finder" or "Forget Remembered Server".
+- A share entered by IP address is tied to its server on the first mount; a different device at the same address in another network gets no login attempt. This also happens while "Mount Automatically" is off for the share and you connect to it yourself.
 
 ### Changed
+- The update dialog says when this version of Mountwell cannot check who signed the update package.
+- Once Mountwell releases are signed, an update installs after the administrator password without opening the Installer window, and only if it is signed by the developer of Mountwell.
 
 ### Fixed
+- A share address containing `"` or `\` could run commands through AppleScript when it was mounted, from the app or the background service. Mounting now passes the address as an argument.
+- A network list with an empty entry, for example `10.46.,,192.168.1.`, let the share mount in every network.
+- A share whose folder in /Volumes contains " on " was unmounted at the wrong path and stayed mounted when its server was gone.
+- Mounting one share showed the spinner on other shares too, and "Check Now" became clickable again while the check was still running.
+- An eject could be forgotten when the background service ran at the same moment; the share was then mounted again.
+- The last share in a hand-edited shares.conf without a final line break was ignored.
+- Installing with nobody logged in, or for a user whose home folder name contains a space, acted on the wrong account.
 
 ## 0.2.0 - 2026-10-29
 ### New

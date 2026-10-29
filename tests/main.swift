@@ -75,6 +75,8 @@ check(Share(url: "/Volumes/x", networks: "").suggestedURL, nil, "local path, no 
 check(Share(url: "smb://", networks: "").suggestedURL, nil, "empty input, no suggestion")
 
 // Replace host (IP → name)
+check(Share(url: "smb://nas@nas/x", networks: "").replacingHost(with: "10.0.0.5"), "smb://nas@10.0.0.5/x", "replace host, user name equal to the host")
+check(Share(url: "smb://smb/x", networks: "").replacingHost(with: "10.0.0.5"), "smb://10.0.0.5/x", "replace host called smb")
 check(Share(url: "smb://192.168.10.20/photos", networks: "").replacingHost(with: "fileserver.example.com"),
       "smb://fileserver.example.com/photos", "replace IP with name")
 check(Share(url: "smb://me@192.168.10.20/photos", networks: "").replacingHost(with: "srv.example.ch"),
@@ -136,6 +138,73 @@ check(props.map(\.mountPoint), ["/Volumes/team", "/Volumes/public", "/Volumes/My
 check(props.allSatisfy { $0.share.networks.isEmpty }, true, "import: no network limit, also for a private IP")
 check(props.allSatisfy { !$0.share.url.contains("secret") }, true, "import: password dropped")
 check(importProposals("", configured: []).count, 0, "import: nothing mounted")
+check(importProposals("//anna@10.46.1.20/team on /Volumes/team (smbfs, nodev)\n",
+                      configured: [Share(url: "smb://fileserver.example.com/team", networks: "")],
+                      servers: ["fileserver.example.com": ["10.46.1.20"]]).count,
+      0, "import: share mounted via its remembered IP is configured")
+
+// Remembered servers (mountwell.sh, servers.yaml)
+let yaml = """
+    # Servers that answered
+    servers:
+      - name: "FileServer.example.com"
+        ip: "10.46.1.20"
+        network: "10.46.105."
+        router: "12:34:56:10:20:30"
+        server_id: "0123abcd"
+        seen: "2026-10-29T23:12:27"
+      - name: "nas.example.com"
+        ip: "not-an-ip"
+        network: "10."
+        router: "-"
+        server_id: "0123abcd"
+      - name: "partial.example.com"
+        ip: "10.1.1.1"
+      - name: "10.9.9.9"
+        ip: "10.9.9.9"
+        network: "10.9.9."
+        router: "-"
+        server_id: "ab12"
+
+    """
+check(parseServers(yaml), ["fileserver.example.com": ["10.46.1.20"], "10.9.9.9": ["10.9.9.9"]], "servers: name lower case, incomplete entries skipped")
+check(parseServers("servers:\n  - name: \"a.example\"\n    ip: \"10.1.1.1\"\n    network: \"10.1.1.\"\n    router: \"-\"\n    server_id: \"1\"\n"
+                   + "  - name: \"a.example\"\n    ip: \"192.168.1.5\"\n    network: \"192.168.1.\"\n    router: \"-\"\n    server_id: \"2\"\n"),
+      ["a.example": ["10.1.1.1", "192.168.1.5"]], "servers: one name in two networks")
+let forgot = forgettingServer("fileserver.EXAMPLE.com", in: yaml)
+check(parseServers(forgot), ["10.9.9.9": ["10.9.9.9"]], "servers: forget one name")
+check(forgot.contains("# Servers that answered"), true, "servers: forgetting keeps the header")
+check(forgot.contains("partial.example.com"), true, "servers: forgetting keeps other entries")
+let one = "servers:\n  - name: \"a.example\"\n    ip: \"10.1.1.1\"\n"
+check(forgettingServer("a.example", in: "# x\n" + one), "# x\nservers: []\n", "servers: forgetting the last entry")
+check(Share(url: "smb://anna@FileServer.example.com/Team", networks: "").hostShare(via: "10.46.1.20"),
+      "10.46.1.20/team", "hostShare via IP")
+
+// SMB server ID (app/smb-id)
+let req = smbNegotiateRequest()
+check(Array(req[4..<8]), [0xfe, 0x53, 0x4d, 0x42], "negotiate: SMB2 protocol id")
+check(Int(req[1]) << 16 | Int(req[2]) << 8 | Int(req[3]), req.count - 4, "negotiate: NetBIOS length")
+check(Int(req[4 + 64]) | Int(req[4 + 65]) << 8, 36, "negotiate: request StructureSize")
+check(Int(req[4 + 66]), 5, "negotiate: five dialects")
+check(Int(req[4 + 92]) | Int(req[4 + 93]) << 8, 112, "negotiate: context offset")
+check(Array(req[4 + 108..<4 + 110]), [0x11, 0x03], "negotiate: 3.1.1 offered last")
+check(req.count, 4 + 112 + 8 + 38, "negotiate: one pre-auth context, 38 bytes")
+func negotiateResponse(status: UInt8 = 0, guid: [UInt8]) -> [UInt8] {
+    var m = [UInt8](repeating: 0, count: 64 + 65)
+    m[0..<4] = [0xfe, 0x53, 0x4d, 0x42]
+    m[8] = status
+    m[64] = 65
+    m[72..<88] = ArraySlice(guid)
+    return [0, 0, 0, UInt8(m.count)] + m
+}
+let guid = (1...16).map { UInt8($0) }
+check(smbServerGUID(negotiateResponse(guid: guid)), "0102030405060708090a0b0c0d0e0f10", "server ID read")
+check(smbServerGUID(negotiateResponse(status: 0x22, guid: guid)), nil, "server ID: error status")
+check(smbServerGUID(negotiateResponse(guid: [UInt8](repeating: 0, count: 16))), nil, "server ID: all zero")
+var smb1 = negotiateResponse(guid: guid)
+smb1[4] = 0xff
+check(smbServerGUID(smb1), nil, "server ID: SMB1 answer of full length")
+check(smbServerGUID([]), nil, "server ID: no answer")
 
 // Version comparison
 check(isNewer("1.1", than: "1.0"), true, "1.1 > 1.0")

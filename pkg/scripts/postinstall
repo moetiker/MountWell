@@ -13,9 +13,12 @@ rm -f "/Library/LaunchAgents/$OLD.plist"
 rm -rf "/Applications/SMB Automount.app"
 pkgutil --forget "$OLD" >/dev/null 2>&1
 
-for uid in $(ps -axo uid=,comm= | awk '/loginwindow$/{print $1}' | sort -u); do
+# real users only: with nobody logged in (MDM, ssh) loginwindow runs as root
+for uid in $(ps -axo uid=,comm= | awk '/loginwindow$/ && $1 >= 501 {print $1}' | sort -u); do
     user=$(id -un "$uid") || continue
-    home=$(dscl . -read "/Users/$user" NFSHomeDirectory | awk '{print $2}')
+    # as plist: the plain output wraps a path with spaces onto a second line
+    home=$(dscl -plist . -read "/Users/$user" NFSHomeDirectory | plutil -extract dsAttrTypeStandard:NFSHomeDirectory.0 raw -o - -) || continue
+    [ -d "$home" ] || continue
     # SMB Automount as single-user installation (first version)
     old="$home/Library/LaunchAgents/$OLD.plist"
     if [ -e "$old" ]; then

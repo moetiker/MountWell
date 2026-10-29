@@ -88,6 +88,56 @@ still applies.
 - The first version logged "no configuration" every minute and exited 1 (now M-9).
 - For a CNAME the reverse lookup returns the host name, not the alias; the app suggests
   that host name for an IP.
+- DNS fallback (M-12 to M-14): the learned address is bound to the /24 of our own address
+  on the interface `route -n get` picks for it and to that interface's router MAC
+  (`ipconfig getoption <if> router`, then `arp -n`). Two offices or homes with the same
+  private range have the same prefix but not the same router. Over VPN there is no router
+  MAC; the `utun` address comes from the VPN, so a hotel network still never matches.
+  The Wi-Fi name was no option: since macOS 14 it is only readable with location access,
+  and it does not cover Ethernet.
+- The server ID is the SMB2 ServerGuid from a NEGOTIATE answer (`app/smb-id`). That step
+  sends no credentials, so a different device at the same IP learns nothing. The GUID is
+  not authenticated: it keeps accidental mix-ups apart, not an attacker who copies it.
+  Only Kerberos or SMB signing on the server guard against that. The request offers
+  3.1.1 with a pre-auth context because servers set to SMB 3.1.1 only reject anything
+  else; an SMB1-only server gives no ID and so no fallback.
+- A mounted share used to be probed by name only. While a VPN came up, DNS failed for
+  about a minute, three probes failed and working shares were force-unmounted, then
+  mounted again via the IP a minute later, over and over. A mounted share is now probed
+  via its remembered IP when the name does not resolve (M-17). The network check is not
+  needed there: the kernel is already connected to that server, and `nc` sends nothing.
+- Right after a network change the ARP cache is empty and `arp -n <router>` says
+  `(incomplete)`. Remembering `-` then made the network differ from the entry seen a
+  second earlier. Hence one `ping -c 1 -t 1` to the router and `?` if it still fails,
+  which never matches and never gets written (M-18).
+- `shlock` instead of a `mkdir` lock: it writes the PID and takes over a lock whose
+  process is gone, so a crashed run does not block every later one (M-19).
+- `servers.yaml` is written and read with `awk` in the one shape the script produces;
+  macOS has no YAML parser for shell scripts. Every value is quoted: YAML 1.1 reads an
+  unquoted MAC like `12:34:56:10:20:30` as a base-60 number.
+- `osascript -e 'mount volume "…"'` with the URL in the script text ran AppleScript from a
+  URL containing `"`; the app escaped `"` but not `\`, which ended the string the same
+  way. The URL now arrives through `on run argv` (M-20).
+- servers.yaml keeps one entry per name and network. With one entry per name, a name that
+  also resolved at home replaced the office entry, and the office fallback was gone.
+- The app takes the script's lock (`withRunLock`) while it changes `ejected` or
+  servers.yaml, and for an eject until the unmount is done: a run in between still saw the
+  share mounted, read that as "mounted again" and dropped the eject.
+- Updates in signed builds go through `install-update` as root, which copies the package
+  to a root-only directory and checks and installs that copy. The package used to be
+  checked in `~/Library/Caches` and then opened in Installer, which reads it much later;
+  anything running as the user could swap it in between and get the administrator
+  password typed for its own package. The app runs `install-update` only from
+  `/Applications/Mountwell.app` and only if root owns it.
+- `smb-id` lives in `Contents/MacOS`, not `Resources`, so `codesign` treats it as nested
+  code; notarization needs it signed with the hardened runtime before the bundle.
+- The keychain entry belongs to the string in the URL. Mounting `smb://<ip>/share` without
+  an entry for `<ip>` makes `mount volume` ask for a password, every minute while DNS is
+  down. Hence the `security find-internet-password -s <ip> -r "smb "` check; without `-w`
+  it reads only attributes and does not prompt. Kerberos needs the name and does not work
+  via the address.
+- `dscacheutil` resolves like the rest of macOS (VPN split DNS included); `host` and `dig`
+  ask the DNS server directly and miss `/etc/resolver` entries.
 
 ## App
 
@@ -126,6 +176,13 @@ still applies.
   not belong in a path.
 
 ## CI and releases
+
+- The repo-infra pieces are called at `@v2`, not at a commit: the standard requires the
+  tag (`repo_infra check` reports anything else), and `oposs/repo-infra` is our own
+  organization, which moves the tag with each release.
+- `REQUIRE_SIGNED_RELEASES=1` (repository variable): set it with the first signed
+  release. Without it a lost signing secret builds an unsigned release, which every
+  signed client then refuses, every day.
 
 - No repo-infra piece builds Swift, so `ci-local.yml` and `release-build-local.yml` do.
 - `macos-26` runners provide the Liquid Glass SDK; Intel is cross-compiled with
