@@ -46,7 +46,7 @@ final class Updater: ObservableObject {
                 if let r = available {
                     offer(r)
                 } else {
-                    info(String(localized: "Mountwell Is Up to Date"), String(localized: "Version \(appVersion) is the latest."))
+                    info(String(localized: "MountWell Is Up to Date"), String(localized: "Version \(appVersion) is the latest."))
                 }
             }
         } catch {
@@ -56,10 +56,10 @@ final class Updater: ObservableObject {
 
     func offer(_ r: Release) {
         let a = NSAlert()
-        a.messageText = String(localized: "Mountwell \(r.version) Is Available")
+        a.messageText = String(localized: "MountWell \(r.version) Is Available")
         var text = String(localized: "Version \(appVersion) is installed. The installer will ask for an administrator password.")
         if updateTeamID == nil {
-            text += "\n\n" + String(localized: "This version of Mountwell cannot check who signed the package. Install it only if you trust the release on GitHub.")
+            text += "\n\n" + String(localized: "This version of MountWell cannot check who signed the package. Install it only if you trust the release on GitHub.")
         }
         if !r.notes.isEmpty { text += "\n\n" + plainNotes(r.notes) }
         a.informativeText = text
@@ -86,7 +86,7 @@ final class Updater: ObservableObject {
                 .appendingPathComponent(agentLabel)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             // fixed name: the version comes from the network and does not belong in a path
-            let pkg = dir.appendingPathComponent("Mountwell-Update.pkg")
+            let pkg = dir.appendingPathComponent("MountWell-Update.pkg")
             try? FileManager.default.removeItem(at: pkg)
             try FileManager.default.moveItem(at: tmp, to: pkg)
             // whoever can publish a release could otherwise ship code that runs as root
@@ -95,7 +95,7 @@ final class Updater: ObservableObject {
                 let r = await Task.detached { run("/usr/sbin/pkgutil", ["--check-signature", path]) }.value
                 guard r.status == 0, installerTeamID(r.output) == team else {
                     try? FileManager.default.removeItem(at: pkg)
-                    throw UpdateError(String(localized: "The package is not signed by the developer of Mountwell. It was deleted and not installed."))
+                    throw UpdateError(String(localized: "The package is not signed by the developer of MountWell. It was deleted and not installed."))
                 }
                 try await installVerified(pkg, team: team)
                 return
@@ -109,14 +109,14 @@ final class Updater: ObservableObject {
     // install-update runs as root and comes from the installed app bundle, which only root
     // can change; a copy anywhere else (a development build) is not trusted with root
     private func installVerified(_ pkg: URL, team: String) async throws {
-        let script = "/Applications/Mountwell.app/Contents/Resources/install-update"
+        let script = "/Applications/MountWell.app/Contents/Resources/install-update"
         let attrs = try? FileManager.default.attributesOfItem(atPath: script)
         guard (attrs?[.ownerAccountID] as? NSNumber)?.intValue == 0,
               let perms = (attrs?[.posixPermissions] as? NSNumber)?.intValue, perms & 0o022 == 0
         else {
-            throw UpdateError(String(localized: "Mountwell is not installed in Applications, so it cannot install updates itself. Install the new version from GitHub."))
+            throw UpdateError(String(localized: "MountWell is not installed in Applications, so it cannot install updates itself. Install the new version from GitHub."))
         }
-        let prompt = String(localized: "Mountwell wants to install an update.")
+        let prompt = String(localized: "MountWell wants to install an update.")
         let path = pkg.path
         let r = await Task.detached {
             run("/usr/bin/osascript", [
@@ -128,7 +128,7 @@ final class Updater: ObservableObject {
         if r.status == 0 { return }
         if r.output.contains("(-128)") { return }   // the user cancelled the password dialog
         if r.output.contains("(4)") {
-            throw UpdateError(String(localized: "The package is not signed by the developer of Mountwell. It was deleted and not installed."))
+            throw UpdateError(String(localized: "The package is not signed by the developer of MountWell. It was deleted and not installed."))
         }
         throw UpdateError(String(localized: "The update could not be installed."))
     }

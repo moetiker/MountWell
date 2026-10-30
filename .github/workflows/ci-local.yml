@@ -1,6 +1,6 @@
 name: CI (macOS)
 
-# Mountwell's own CI job, called from ci.yml. Runs the tests and builds the
+# MountWell's own CI job, called from ci.yml. Runs the tests and builds the
 # Universal app and the package with build.sh, the same as on a developer Mac.
 # The macOS 26 SDK (Xcode 26) is needed for the Liquid Glass APIs.
 on:
@@ -37,6 +37,6 @@ jobs:
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
-          name: Mountwell-package
-          path: build/Mountwell-*.pkg
+          name: MountWell-package
+          path: build/MountWell-*.pkg
           if-no-files-found: error

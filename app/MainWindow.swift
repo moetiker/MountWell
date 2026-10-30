@@ -39,9 +39,9 @@ struct ShareCard: View {
         guard !viaIPs.isEmpty else { return "" }
         let ips = viaIPs.joined(separator: ", ")
         if let ip = missingPassword.first {
-            return String(localized: "No password saved for \(ip), so Mountwell does not use it when the name does not resolve. Right-click → Connect via \(ip) in Finder.")
+            return String(localized: "No password saved for \(ip), so MountWell does not use it when the name does not resolve. Right-click → Connect via \(ip) in Finder.")
         }
-        return String(localized: "If the name does not resolve, Mountwell mounts via \(ips), in the network where it learned that address.")
+        return String(localized: "If the name does not resolve, MountWell mounts via \(ips), in the network where it learned that address.")
     }
 
     var body: some View {
@@ -375,7 +375,7 @@ struct ContentView: View {
         .padding(16)
         .frame(minWidth: 640)
         .background { Backdrop() }
-        .navigationTitle("Mountwell")
+        .navigationTitle("MountWell")
         .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItem(placement: .navigation) {

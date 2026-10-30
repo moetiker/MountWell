@@ -7,7 +7,7 @@
       "verify": "^$VERSION$"
     }
   ],
-  "release_assets": ["Mountwell-*.pkg"],
+  "release_assets": ["MountWell-*.pkg"],
   "exceptions": {
     "linux-packages": "a macOS app built on SwiftUI, launchd and diskutil; it does not run on Linux",
     "homebrew": "a macOS GUI app shipped as an installer package; a formula is the wrong channel, and a cask would need its own tap"

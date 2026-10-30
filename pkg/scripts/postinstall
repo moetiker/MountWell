@@ -2,7 +2,7 @@
 # Load the service for logged-in users, remove the predecessor "SMB Automount"
 LABEL=ch.oetiker.mountwell
 PLIST="/Library/LaunchAgents/$LABEL.plist"
-APP="/Applications/Mountwell.app"
+APP="/Applications/MountWell.app"
 OLD=ch.oetiker.smb-automount
 
 chown root:wheel "$PLIST"

@@ -550,7 +550,7 @@ setup 'smb://neu.example/x\n' '' ''
 mkdir -p "$T/home/.config/smb-automount"
 runit
 [ -e "$T/home/.config/smb-automount" ] && grep -q neu.example "$T/home/.config/mountwell/shares.conf" \
-    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: existing Mountwell configuration overwritten"; }
+    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: existing MountWell configuration overwritten"; }
 
 echo "$pass/$((pass + fail)) script tests ok"
 [ $fail = 0 ]

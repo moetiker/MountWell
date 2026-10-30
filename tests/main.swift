@@ -219,11 +219,11 @@ check(isNewer("1.0", than: "dev"), true, "development build is older")
 let releaseJSON = """
     {"tag_name": "v1.2", "html_url": "https://github.com/o/r/releases/tag/v1.2", "body": "New: updates",
      "assets": [{"name": "notes.txt", "browser_download_url": "https://x/notes.txt"},
-                {"name": "Mountwell-1.2.pkg", "browser_download_url": "https://x/Mountwell-1.2.pkg"}]}
+                {"name": "MountWell-1.2.pkg", "browser_download_url": "https://x/MountWell-1.2.pkg"}]}
     """
 let rel = parseRelease(Data(releaseJSON.utf8))
 check(rel?.version, "1.2", "release: version without v")
-check(rel?.pkgURL.absoluteString, "https://x/Mountwell-1.2.pkg", "release: .pkg file chosen")
+check(rel?.pkgURL.absoluteString, "https://x/MountWell-1.2.pkg", "release: .pkg file chosen")
 check(rel?.notes, "New: updates", "release: notes")
 check(parseRelease(Data(#"{"tag_name": "v1.3", "assets": []}"#.utf8)), nil, "ignore release without .pkg")
 check(parseRelease(Data("no json".utf8)), nil, "invalid response")
@@ -231,7 +231,7 @@ check(parseRelease(Data("no json".utf8)), nil, "invalid response")
 // Update signature (pkgutil --check-signature output)
 func sigOutput(status: String, leaf: String) -> String {
     """
-    Package "Mountwell-Update.pkg":
+    Package "MountWell-Update.pkg":
        Status: \(status)
        Notarization: trusted by the Apple notary service
        Signed with a trusted timestamp on: 2026-10-29 10:00:00 +0000
@@ -262,7 +262,7 @@ check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Instal
       nil, "signature: old certificate without team ID")
 check(installerTeamID(sigOutput(status: distribution, leaf: "Developer ID Installer: Jane Example (ab12cd34ef)")),
       nil, "signature: team ID must be upper case")
-check(installerTeamID("Package \"Mountwell-0.0.3.pkg\":\n   Status: no signature\n"), nil, "signature: unsigned")
+check(installerTeamID("Package \"MountWell-0.0.3.pkg\":\n   Status: no signature\n"), nil, "signature: unsigned")
 check(isTeamID("AB12CD34EF"), true, "team ID valid")
 check(isTeamID("@TEAM_ID@"), false, "team ID placeholder")
 check(isTeamID(""), false, "team ID empty")

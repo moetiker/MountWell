@@ -14,6 +14,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### New
 
 ### Changed
+- Mountwell is now called MountWell: the app is `MountWell.app` and the package `MountWell-<version>.pkg`. The update replaces the old app; settings in `~/.config/mountwell` stay.
 
 ### Fixed
 

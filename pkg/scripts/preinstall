@@ -1,13 +1,13 @@
 #!/bin/bash
 # Unload the running service before the update and quit the running app (postinstall relaunches it).
-# Also applies to the predecessor "SMB Automount".
+# Also applies to "Mountwell" (0.3.1 and earlier) and the predecessor "SMB Automount".
 LABEL=ch.oetiker.mountwell
 OLD=ch.oetiker.smb-automount
 # real users only: with nobody logged in (MDM, ssh) loginwindow runs as root
 for uid in $(ps -axo uid=,comm= | awk '/loginwindow$/ && $1 >= 501 {print $1}' | sort -u); do
     launchctl bootout "gui/$uid/$LABEL" 2>/dev/null
     launchctl bootout "gui/$uid/$OLD" 2>/dev/null
-    if pkill -u "$uid" -x "Mountwell" || pkill -u "$uid" -x "SMB Automount"; then
+    if pkill -u "$uid" -x "MountWell" || pkill -u "$uid" -x "Mountwell" || pkill -u "$uid" -x "SMB Automount"; then
         touch "/var/run/$LABEL.relaunch.$uid"
     fi
 done

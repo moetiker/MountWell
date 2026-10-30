@@ -10,7 +10,7 @@ struct HelpView: View {
                     Image(systemName: "questionmark.circle.fill")
                         .font(.system(size: 34))
                         .foregroundStyle(.tint)
-                    Text("Mountwell Help").font(.title.bold())
+                    Text("MountWell Help").font(.title.bold())
                 }
                 section("How it works", "bolt.horizontal.circle", """
                     On every network change, and every minute in addition, a background service checks whether the servers of your shares respond on SMB port 445. If a server responds, its shares are mounted; once it stops responding (different network, VPN disconnected), they are unmounted. So Finder never hangs on dead connections.
@@ -43,9 +43,9 @@ struct HelpView: View {
                     Optional name for a share, e.g. **Photos at home**. The window and the menu bar show it instead of the share name. Without an alias the menu bar shows **server/share**. The folder in /Volumes keeps the share's own name.
                     """)
                 section("Importing and switching off", "square.and.arrow.down.on.square", """
-                    **Import Mounted Shares…** in the menu bar menu proposes every SMB share that is mounted right now but not in Mountwell yet, for example one you connected to in Finder. Check the address, network limit and alias, then import.
+                    **Import Mounted Shares…** in the menu bar menu proposes every SMB share that is mounted right now but not in MountWell yet, for example one you connected to in Finder. Check the address, network limit and alias, then import.
 
-                    **Mount Automatically** in a share's context menu, its edit window or its menu bar entry turns it off without removing it: Mountwell then neither mounts nor unmounts it. **Mount** still works by hand.
+                    **Mount Automatically** in a share's context menu, its edit window or its menu bar entry turns it off without removing it: MountWell then neither mounts nor unmounts it. **Mount** still works by hand.
                     """)
                 section("When DNS fails", "point.3.connected.trianglepath.dotted", """
                     While a server name resolves, the background service remembers its IP address, the network you are in (address range and router) and the server's SMB ID. If the name later does not resolve (DNS down, VPN DNS broken), it mounts the share via that address, but only in the same network and only if the same server answers there. A different device at the same address in another office or at home gets no login attempt. The card shows the address next to the server.
@@ -55,13 +55,13 @@ struct HelpView: View {
                     A share entered **by IP address** is pinned the same way on its first mount, once per network. In a network where it has not been mounted yet, connect it by hand once; after that it mounts there by itself. If a server is replaced, choose **Forget Remembered Server** in its context menu.
                     """)
                 section("Ejecting", "eject", """
-                    Use the **eject button** on a share, or its entry in the menu bar, to unmount it by hand. Mountwell then leaves it alone until you mount it again or the server goes out of reach, e.g. when you leave the office network. Ejecting in Finder does not work for this: the background service mounts the share again within a minute.
+                    Use the **eject button** on a share, or its entry in the menu bar, to unmount it by hand. MountWell then leaves it alone until you mount it again or the server goes out of reach, e.g. when you leave the office network. Ejecting in Finder does not work for this: the background service mounts the share again within a minute.
                     """)
                 section("Password", "key", """
                     The background service takes the password from the keychain. So connect once per share with the **link button** and choose **“Remember this password in my keychain”** in the Finder dialog.
                     """)
                 section("Starting at login", "power", """
-                    **Run at Login** starts Mountwell when you log in; it then sits in the menu bar. With **Show Window at Login**, the window opens as well. Both are in the menu bar menu and in **Mountwell → Settings** (⌘,). The background service mounts your shares even when Mountwell is not running.
+                    **Run at Login** starts MountWell when you log in; it then sits in the menu bar. With **Show Window at Login**, the window opens as well. Both are in the menu bar menu and in **MountWell → Settings** (⌘,). The background service mounts your shares even when MountWell is not running.
                     """)
                 section("Troubleshooting", "stethoscope", """
                     • The log shows every mount and unmount. Show it via **View → Show Log** (⌘L).

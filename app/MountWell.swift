@@ -1,4 +1,4 @@
-// Mountwell: configuration UI for the mountwell background script.
+// MountWell: configuration UI for the mountwell background script.
 // Edits ~/.config/mountwell/shares.conf and shows status and log. This file holds the
 // paths, the app's entry point and its menu commands; the rest is split by window in
 // the other files of app/ (Core.swift is the logic without UI, shared with the tests).
@@ -21,14 +21,14 @@ let ejectedFile = configDir.appendingPathComponent("ejected")
 let serversFile = configDir.appendingPathComponent("servers.yaml")
 let logFile = home.appendingPathComponent("Library/Logs/mountwell.log")
 let scriptPath = Bundle.main.path(forResource: "mountwell", ofType: nil)
-    ?? "/Applications/Mountwell.app/Contents/Resources/mountwell"
+    ?? "/Applications/MountWell.app/Contents/Resources/mountwell"
 let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     ?? ProcessInfo.processInfo.environment["MOUNTWELL_VERSION"] ?? "dev"
 // "owner/repo" on GitHub, filled in by build.sh
-let updateRepo = (Bundle.main.object(forInfoDictionaryKey: "MountwellUpdateRepo") as? String).flatMap { $0.contains("/") ? $0 : nil }
+let updateRepo = (Bundle.main.object(forInfoDictionaryKey: "MountWellUpdateRepo") as? String).flatMap { $0.contains("/") ? $0 : nil }
 // Apple team whose Developer ID must have signed an update, filled in by build.sh;
 // empty for builds without one, which then install updates unchecked
-let updateTeamID = (Bundle.main.object(forInfoDictionaryKey: "MountwellTeamID") as? String).flatMap { isTeamID($0) ? $0 : nil }
+let updateTeamID = (Bundle.main.object(forInfoDictionaryKey: "MountWellTeamID") as? String).flatMap { isTeamID($0) ? $0 : nil }
 
 struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
@@ -36,7 +36,7 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("About Mountwell") { showAbout() }
+            Button("About MountWell") { showAbout() }
             if updateRepo != nil {
                 Button("Check for Updates…") { Task { await Updater.shared.check(manual: true) } }
             }
@@ -50,7 +50,7 @@ struct AppCommands: Commands {
             Divider()
         }
         CommandGroup(replacing: .help) {
-            Button("Mountwell Help") { openWindow(id: "help") }
+            Button("MountWell Help") { openWindow(id: "help") }
                 .keyboardShortcut("?", modifiers: .command)
         }
     }
@@ -105,25 +105,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 #if !SCREENSHOT
 @main
-struct MountwellApp: App {
+struct MountWellApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var m = Model()
 
     var body: some Scene {
         // Window, not WindowGroup: a single main window, otherwise several Models overwrite each other
-        Window("Mountwell", id: "main") {
+        Window("MountWell", id: "main") {
             ContentView(m: m)
         }
         .windowResizability(.contentSize)   // height follows the share list, see ContentView.listHeight
         .windowToolbarStyle(.unified)
         .commands { AppCommands() }
 
-        Window("Mountwell Help", id: "help") {
+        Window("MountWell Help", id: "help") {
             HelpView()
         }
         .windowResizability(.contentMinSize)
 
-        MenuBarExtra("Mountwell", systemImage: m.menuBarIcon) {
+        MenuBarExtra("MountWell", systemImage: m.menuBarIcon) {
             MenuBarMenu(m: m)
         }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds "Mountwell.app" (Universal) and from it build/Mountwell-<version>.pkg
+# Builds "MountWell.app" (Universal) and from it build/MountWell-<version>.pkg
 set -eu
 cd "$(dirname "$0")"
 # the release sets VERSION; otherwise the file VERSION, which Create release PR updates
@@ -29,7 +29,7 @@ if [ "$REQUIRE_SIGNING" = 1 ] && { [ -z "$SIGN_APP" ] || [ -z "$SIGN_PKG" ] || [
     echo "REQUIRE_SIGNING=1, but Developer ID Application, Developer ID Installer or the team ID is missing" >&2
     exit 1
 fi
-APP="Mountwell"
+APP="MountWell"
 ID=ch.oetiker.mountwell
 B=build
 # explicit SDK, so stale headers in /usr/local/include do not interfere
@@ -88,7 +88,7 @@ plutil -replace 0.BundleIsRelocatable -bool NO "$B/component.plist"
 
 pkgbuild --root "$B/root" --component-plist "$B/component.plist" --scripts pkg/scripts \
     --identifier "$ID" --version "$VERSION" --install-location / "$B/component.pkg"
-PKG="$B/Mountwell-$VERSION.pkg"
+PKG="$B/MountWell-$VERSION.pkg"
 if [ -n "$SIGN_PKG" ]; then
     productbuild --sign "$SIGN_PKG" --timestamp --package "$B/component.pkg" "$PKG"
 else

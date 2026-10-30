@@ -82,7 +82,7 @@ final class Model: ObservableObject {
         var text = """
             # [!]smb://[user@]server/share   [optional IP prefixes, comma-separated]   [# optional alias]
             # "!" disables a share: it is neither mounted nor unmounted
-            # Managed by Mountwell.app
+            # Managed by MountWell.app
 
             """
         for s in shares {
@@ -136,7 +136,7 @@ final class Model: ObservableObject {
             await MainActor.run {
                 if found.isEmpty {
                     showAlert(String(localized: "Nothing to Import"),
-                              String(localized: "Every mounted SMB share is already in Mountwell. Connect to a share in Finder first, then import it here."))
+                              String(localized: "Every mounted SMB share is already in MountWell. Connect to a share in Finder first, then import it here."))
                 } else {
                     self.imports = found
                 }

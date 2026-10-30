@@ -22,7 +22,7 @@ struct ImportSheet: View {
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Import Mounted Shares").font(.title2.bold())
-                    Text("These SMB shares are mounted but not in Mountwell yet.")
+                    Text("These SMB shares are mounted but not in MountWell yet.")
                         .foregroundStyle(.secondary)
                 }
             }
