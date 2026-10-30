@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 # the release sets VERSION; otherwise the file VERSION, which Create release PR updates
 VERSION="${VERSION:-$(cat VERSION)}"
 # GitHub repository whose releases the app offers as updates
-REPO="${REPO:-moetiker/mountwell}"
+REPO="${REPO:-moetiker/MountWell}"
 # Developer ID certificates in the keychain; without them app and package are signed ad hoc
 # and stay unsigned. SIGN_APP and SIGN_PKG override the lookup.
 SIGN_APP="${SIGN_APP-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"$/\1/p' | head -1)}"

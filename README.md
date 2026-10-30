@@ -1,7 +1,7 @@
 # MountWell
 
-[![CI](https://github.com/moetiker/mountwell/actions/workflows/ci.yml/badge.svg)](https://github.com/moetiker/mountwell/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/moetiker/mountwell)](https://github.com/moetiker/mountwell/releases/latest)
+[![CI](https://github.com/moetiker/MountWell/actions/workflows/ci.yml/badge.svg)](https://github.com/moetiker/MountWell/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/moetiker/MountWell)](https://github.com/moetiker/MountWell/releases/latest)
 
 MountWell connects your Mac to the network drives (SMB shares) at work or at home as soon
 as their server can be reached, in the office or over VPN. When you leave, it disconnects
@@ -17,7 +17,7 @@ itself in English or German, following your Mac's language.
 
 ## Install
 
-1. Open the [latest release](https://github.com/moetiker/mountwell/releases/latest) and
+1. Open the [latest release](https://github.com/moetiker/MountWell/releases/latest) and
    click **MountWell-….pkg** under *Assets* to download it.
 2. Double-click the downloaded file in your *Downloads* folder and follow the installer.
    It asks for your Mac password at the end.
