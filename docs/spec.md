@@ -64,16 +64,18 @@ configuration, the Mac App Store.
 
 ## 3. Configuration
 
-- **C-1** `~/.config/mountwell/shares.conf`, one share per line:
+- **C-1** `~/Library/Application Support/MountWell/shares.conf`, one share per line:
   `[!]smb://[user@]server/share [prefix,prefix,…] [# alias]`. Blank lines and lines
   starting with `#` are ignored. The service ignores the alias. A leading `!` disables
   the share: the service neither mounts nor unmounts it.
-- **C-2** `~/.config/mountwell/disabled` exists ⇔ automatic mounting is off.
-- **C-3** `~/.config/mountwell/ejected` lists ejected shares, one lower-case
+- **C-2** `disabled` in the same folder exists ⇔ automatic mounting is off.
+- **C-3** `ejected` there lists ejected shares, one lower-case
   `server/share` per line. The app adds, the service removes (M-6).
-- **C-4** Configuration and log of the predecessor "SMB Automount" are moved over unless
-  MountWell's already exist.
-- **C-5** `~/.config/mountwell/servers.yaml`, written by the service: a list `servers`
+- **C-4** The configuration of MountWell 0.4 and earlier (`~/.config/mountwell`), or else
+  of the predecessor "SMB Automount" (`~/.config/smb-automount`), moves to `~/Library/Application Support/MountWell`,
+  and SMB Automount's log to MountWell's, unless MountWell's already exist. Installer,
+  app and service each do it, whichever runs first.
+- **C-5** `servers.yaml` there, written by the service: a list `servers`
   with `name`, `ip`, `network` (own /24 prefix), `router` (MAC, `-` over VPN), `server_id`
   and `seen`, all quoted strings; one entry per server name or configured IP. Entries
   missing a field are ignored. The app removes an entry on Forget Remembered Server.
@@ -139,15 +141,17 @@ configuration, the Mac App Store.
 
 - **I-1** A Universal installer package for macOS 14 or later installs
   `/Applications/MountWell.app` and the system-wide LaunchAgent `ch.oetiker.mountwell`.
+  launchd starts the signed program `Contents/MacOS/mountwell-agent`, which runs the
+  script.
 - **I-2** Installing loads the service for all logged-in users and opens the app for users
   without a configuration.
 - **I-7** Installing acts only on logged-in users with a uid of 501 or more, not on the
   login window's root session.
 - **I-3** Installing over a running app quits and relaunches it.
-- **I-4** Installing removes SMB Automount and takes over its configuration (C-4).
+- **I-4** Installing removes SMB Automount and moves older configurations (C-4).
 - **I-5** An uninstaller in the app bundle removes app and service, keeps the
   configuration.
-- **I-6** Login Items in System Settings show the service as MountWell.
+- **I-6** Login Items in System Settings show the service as MountWell, with its developer.
 
 ## 7. Updates
 

@@ -272,6 +272,23 @@ check(isTeamID("AB12CD34E"), false, "team ID too short")
 check(plainNotes("### Fixed\n- `example.com` is **no** match\n"), "Fixed:\n- example.com is no match", "notes without Markdown")
 check(plainNotes("## 1.0 - 2026-01-01\n### New\n- a"), "1.0 - 2026-01-01:\nNew:\n- a", "headings become labels")
 
+// Settings move (C-4)
+let mv = FileManager.default.temporaryDirectory.appendingPathComponent("mountwell-move-\(getpid())")
+let mvNew = mv.appendingPathComponent("Library/Application Support/MountWell")
+let mvOld = mv.appendingPathComponent(".config/mountwell")
+let mvOlder = mv.appendingPathComponent(".config/smb-automount")
+try? FileManager.default.createDirectory(at: mvOld, withIntermediateDirectories: true)
+try? FileManager.default.createDirectory(at: mvOlder, withIntermediateDirectories: true)
+try? "smb://srv/team\n".write(to: mvOld.appendingPathComponent("shares.conf"), atomically: true, encoding: .utf8)
+moveConfig(to: mvNew, from: [mvOld, mvOlder])
+check(FileManager.default.fileExists(atPath: mvNew.appendingPathComponent("shares.conf").path), true, "move: ~/.config/mountwell moved")
+check(FileManager.default.fileExists(atPath: mvOld.path), false, "move: old folder gone")
+check(FileManager.default.fileExists(atPath: mvOlder.path), true, "move: only the first existing folder moves")
+try? FileManager.default.createDirectory(at: mvOld, withIntermediateDirectories: true)
+moveConfig(to: mvNew, from: [mvOld, mvOlder])
+check(FileManager.default.fileExists(atPath: mvOld.path), true, "move: an existing new folder is not replaced")
+try? FileManager.default.removeItem(at: mv)
+
 // Optionally a real internal server: MOUNTWELL_TEST_SERVER=fileserver.example.com tests/run.sh
 if let server = ProcessInfo.processInfo.environment["MOUNTWELL_TEST_SERVER"], !server.isEmpty {
     if !resolve(server).isEmpty {

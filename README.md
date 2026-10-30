@@ -93,7 +93,7 @@ Open the *Terminal* app, paste this line, press Return and enter your Mac passwo
 sudo "/Applications/MountWell.app/Contents/Resources/uninstall.sh"
 ```
 
-Your list of drives stays in `~/.config/mountwell`, in case you install MountWell again.
+Your list of drives stays in `~/Library/Application Support/MountWell`, in case you install MountWell again.
 
 Installed with Homebrew: `brew uninstall --cask mountwell`, or with `--zap` to remove the
 list of drives and the log as well.
@@ -106,7 +106,7 @@ Install without the window:
 sudo installer -pkg MountWell-<version>.pkg -target /
 ```
 
-The drives are kept in `~/.config/mountwell/shares.conf`, one per line, with an optional
+The drives are kept in `~/Library/Application Support/MountWell/shares.conf`, one per line, with an optional
 list of IP prefixes and an optional alias after `#`. A leading `!` switches a drive off:
 
 ```
@@ -116,7 +116,7 @@ smb://nas.example.com/photos 192.168.10. # Photos at home
 ```
 
 While a server name resolves, the background service remembers the server's IP address,
-network and SMB server ID in `~/.config/mountwell/servers.yaml`. If the name later stops
+network and SMB server ID in `servers.yaml` in the same folder. If the name later stops
 resolving, for example when the VPN's DNS breaks, it connects via that address, from the
 same network only and only if the same server answers. Connect once via the address
 (right-click the drive) so its password is in the keychain too.

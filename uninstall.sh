@@ -1,7 +1,7 @@
 #!/bin/bash
 # Removes MountWell (app and background service).
 # Usage: sudo "/Applications/MountWell.app/Contents/Resources/uninstall.sh"
-# The configuration in ~/.config/mountwell is kept.
+# The configuration in ~/Library/Application Support/MountWell is kept.
 main() {
     LABEL=ch.oetiker.mountwell
     if [ "$(id -u)" -ne 0 ]; then

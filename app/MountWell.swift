@@ -1,7 +1,8 @@
 // MountWell: configuration UI for the mountwell background script.
-// Edits ~/.config/mountwell/shares.conf and shows status and log. This file holds the
-// paths, the app's entry point and its menu commands; the rest is split by window in
-// the other files of app/ (Core.swift is the logic without UI, shared with the tests).
+// Edits shares.conf in ~/Library/Application Support/MountWell and shows status and log.
+// This file holds the paths, the app's entry point and its menu commands; the rest is
+// split by window in the other files of app/ (Core.swift is the logic without UI, shared
+// with the tests).
 // UI texts are English; de.lproj/Localizable.strings holds the German translation.
 
 import AppKit
@@ -12,7 +13,14 @@ import SwiftUI
 let agentLabel = "ch.oetiker.mountwell"
 let agentPlist = "/Library/LaunchAgents/\(agentLabel).plist"
 let home = FileManager.default.homeDirectoryForCurrentUser
-let configDir = home.appendingPathComponent(".config/mountwell")
+// settings of MountWell 0.4 and earlier (~/.config/mountwell) or of SMB Automount move
+// here on first use
+let configDir: URL = {
+    let dir = home.appendingPathComponent("Library/Application Support/MountWell")
+    moveConfig(to: dir, from: [home.appendingPathComponent(".config/mountwell"),
+                               home.appendingPathComponent(".config/smb-automount")])
+    return dir
+}()
 let configFile = configDir.appendingPathComponent("shares.conf")
 let disabledFile = configDir.appendingPathComponent("disabled")
 // shares ejected by hand; mountwell.sh does not mount them again until the entry is gone

@@ -14,6 +14,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### New
 
 ### Changed
+- Settings move from `~/.config/mountwell` to `~/Library/Application Support/MountWell`, where macOS apps keep them. The update moves them; nothing to do by hand.
+- System Settings → General → Login Items shows the background service as MountWell with its developer instead of as from an unknown developer.
 
 ### Fixed
 - Homebrew installs 0.4.0. Homebrew 7 loads the cask only after `brew trust moetiker/mountwell`; the README now says so.
