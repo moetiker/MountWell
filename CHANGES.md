@@ -14,6 +14,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### New
 
 ### Changed
+
+### Fixed
+
+## 0.4.1 - 2026-10-30
+### Changed
 - Settings move from `~/.config/mountwell` to `~/Library/Application Support/MountWell`, where macOS apps keep them. The update moves them; nothing to do by hand.
 - System Settings → General → Login Items shows the background service as MountWell with its developer instead of as from an unknown developer.
 
