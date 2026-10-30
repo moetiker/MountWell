@@ -1,0 +1,18 @@
+name: Proof of ri-release-macos-signed
+
+# Temporary: runs the release build on this branch, as Create release PR would,
+# against the repo-infra branch of the piece. Removed before the merge.
+on:
+  push:
+    branches: [ci/ri-release-macos-signed]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/release-build.yml
+    with:
+      version: 0.3.1
+      ref: ${{ github.sha }}
+    secrets: inherit

@@ -1,9 +1,9 @@
 name: Release build
 
 # Called by Create release PR on the release branch before the pull request
-# exists (D28). No repo-infra piece builds a macOS app, so the build is
-# MountWell's own release-build-local.yml. Read-only: nothing here writes the
-# repository.
+# exists (D28). ri-release-macos-signed runs build.sh with the Developer ID
+# certificates in a temporary keychain, then notarizes, staples and checks the
+# package. Read-only: nothing here writes the repository.
 on:
   workflow_call:
     inputs:
@@ -20,10 +20,17 @@ permissions:
   contents: read
 
 jobs:
-  package:
-    uses: ./.github/workflows/release-build-local.yml
+  macos:
+    uses: oposs/repo-infra/.github/workflows/ri-release-macos-signed.yml@feat/ri-release-macos-signed
     with:
       version: ${{ inputs.version }}
       ref: ${{ inputs.ref }}
-    # the signing certificates and the notarization key (release-build-local.yml)
-    secrets: inherit
+      # signed whenever the piece imported the certificates; the piece notarizes
+      build: REQUIRE_SIGNING=$MACOS_SIGNING NOTARIZE=0 ./build.sh
+      assets: build/MountWell-*.pkg
+    secrets:
+      MACOS_CERTS_P12: ${{ secrets.MACOS_CERTS_P12 }}
+      MACOS_CERTS_PASSWORD: ${{ secrets.MACOS_CERTS_PASSWORD }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
