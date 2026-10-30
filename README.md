@@ -28,6 +28,7 @@ With [Homebrew](https://brew.sh), install it in Terminal instead:
 
 ```sh
 brew tap moetiker/mountwell https://github.com/moetiker/MountWell
+brew trust moetiker/mountwell
 brew install --cask mountwell
 ```
 
