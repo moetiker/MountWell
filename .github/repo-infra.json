@@ -10,6 +10,6 @@
   "release_assets": ["MountWell-*.pkg"],
   "exceptions": {
     "linux-packages": "a macOS app built on SwiftUI, launchd and diskutil; it does not run on Linux",
-    "homebrew": "a macOS GUI app shipped as an installer package; a formula is the wrong channel, and a cask would need its own tap"
+    "homebrew": "a macOS GUI app shipped as an installer package: the repository is its own tap with a cask, Casks/mountwell.rb, kept by hand, since no piece updates a cask and a formula is the wrong channel"
   }
 }

@@ -33,7 +33,7 @@ jobs:
       - name: Test and build
         run: ./build.sh
 
-      # Not a release asset: only the release build (release-build.yml) uploads those.
+      # Not a release asset: only release-build-local.yml uploads those.
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
