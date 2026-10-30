@@ -21,11 +21,16 @@ extension View {
 
     @ViewBuilder
     func glassButton(prominent: Bool = false) -> some View {
+        #if SCREENSHOT
+        // glass buttons are drawn by the window server too and came out nearly invisible
+        if prominent { self.buttonStyle(.borderedProminent) } else { self.buttonStyle(.bordered) }
+        #else
         if #available(macOS 26.0, *) {
             if prominent { self.buttonStyle(.glassProminent) } else { self.buttonStyle(.glass) }
         } else {
             if prominent { self.buttonStyle(.borderedProminent) } else { self.buttonStyle(.bordered) }
         }
+        #endif
     }
 }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Renders docs/screenshot.png: the main window with example shares, light mode.
+# Renders the pictures in docs/ (see tools/screenshot/main.swift), light mode.
 set -eu
 cd "$(dirname "$0")/.."
 export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
@@ -9,4 +9,4 @@ trap 'rm -rf "$OUT"' EXIT
 swiftc -sdk "$SDKROOT" -swift-version 5 -D SCREENSHOT -target "$(uname -m)-apple-macos14.0" \
     $(ls app/*.swift | grep -v '/make-icon\.swift$') tools/screenshot/main.swift -o "$OUT/screenshot"
 mkdir -p docs
-MOUNTWELL_VERSION="$(cat VERSION)" "$OUT/screenshot" docs/screenshot.png -AppleLanguages '(en)'
+"$OUT/screenshot" docs -AppleLanguages '(en)'

@@ -3,39 +3,98 @@
 [![CI](https://github.com/moetiker/mountwell/actions/workflows/ci.yml/badge.svg)](https://github.com/moetiker/mountwell/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/moetiker/mountwell)](https://github.com/moetiker/mountwell/releases/latest)
 
-Mountwell mounts SMB shares on macOS while their file server is reachable, in the office
-network or over VPN, and unmounts them when it is not. Finder no longer hangs on a share
-whose server is gone, and after the VPN comes up the shares are there.
+Mountwell connects your Mac to the network drives (SMB shares) at work or at home as soon
+as their server can be reached, in the office or over VPN. When you leave, it disconnects
+them again, so Finder never hangs on a drive that is gone.
 
-![The Mountwell window with three shares](docs/screenshot.png)
+![The Mountwell window with four shares](docs/screenshot.png)
 
-- A background service checks every share on each network change and every minute.
-- Shares can be limited to networks by IP prefix, given an alias, switched off, and ejected by hand.
-- Shares already mounted in Finder can be imported from the menu bar menu.
-- A menu bar icon shows the state; the app checks addresses while you type them.
-- Mountwell can start at login, with or without its window (Settings, ⌘,).
-- The app follows the Mac's language (English or German) and finds its own updates.
+You add each drive once. After that Mountwell works in the background: open your laptop
+in the office or start the VPN, and the drives are there.
 
-macOS 14 or later, Apple silicon or Intel.
+It needs macOS 14 or later and runs on Apple silicon and Intel Macs. Mountwell shows
+itself in English or German, following your Mac's language.
 
 ## Install
 
-Download `Mountwell-<version>.pkg` from the
-[latest release](https://github.com/moetiker/mountwell/releases/latest) and open it, or
-install it in Terminal:
+1. Open the [latest release](https://github.com/moetiker/mountwell/releases/latest) and
+   click **Mountwell-….pkg** under *Assets* to download it.
+2. Double-click the downloaded file in your *Downloads* folder and follow the installer.
+   It asks for your Mac password at the end.
+3. Mountwell opens by itself. From now on it also sits in the menu bar at the top of the
+   screen.
+
+## Add a drive
+
+1. Click **+** in the Mountwell window.
+2. Enter the address of the drive, for example `smb://fileserver.example.com/team`. Your
+   IT department or the person who set up the server can tell you the address. A Windows
+   address such as `\\fileserver\team` works too: Mountwell offers to convert it.
+3. Optionally give the drive a name of your own under **Alias**, such as "Team Drive".
+4. Click **Save**.
+
+![Adding a drive: Mountwell converts a Windows address](docs/screenshot-add.png)
+
+While you type, Mountwell checks the address and explains what is wrong, for example a
+missing server name or a server that cannot be reached right now.
+
+**Save the password once.** Click the chain button on the drive (shown when you move the
+mouse over it). Finder asks for your user name and password: tick **Remember this
+password in my keychain** and click **Connect**. Without this step Mountwell cannot
+connect the drive on its own.
+
+## Drives you already use
+
+If you already connected drives in Finder, click the Mountwell icon in the menu bar and
+choose **Import Mounted Shares…**. Mountwell lists every connected drive it does not
+know yet; untick the ones you do not want and click **Import**.
+
+![Importing drives that are already connected](docs/screenshot-import.png)
+
+## Everyday use
+
+- **The menu bar icon** shows whether drives are connected. Its menu lists your drives;
+  each can be shown in Finder, ejected or connected from there.
+- **Eject a drive** with the eject button on the drive or in the menu bar. Mountwell then
+  leaves it alone until you connect it again or leave the network. Ejecting in Finder is
+  not enough: Mountwell would connect it again within a minute.
+- **Switch a drive off** without removing it: right-click it and untick
+  **Mount Automatically**. It stays in the list, greyed out.
+- **Start at login:** choose **Mountwell → Settings…** and turn on **Run at Login**.
+  With **Show Window at Login** the window opens too; otherwise Mountwell waits in the
+  menu bar.
+- **Updates:** Mountwell tells you when a new version is out. Click **Install** and enter
+  your Mac password.
+
+## When something does not work
+
+- Click **?** in the window for help on addresses, passwords and networks.
+- **View → Show Log** shows what Mountwell did and why.
+- A red dot at the bottom left means the background service is not running: click
+  **Load**.
+- A drive that says *Unreachable* cannot be reached from where you are. Start the VPN or
+  go to the network the drive belongs to.
+
+## Uninstall
+
+Open the *Terminal* app, paste this line, press Return and enter your Mac password:
+
+```sh
+sudo "/Applications/Mountwell.app/Contents/Resources/uninstall.sh"
+```
+
+Your list of drives stays in `~/.config/mountwell`, in case you install Mountwell again.
+
+## For administrators
+
+Install without the window:
 
 ```sh
 sudo installer -pkg Mountwell-<version>.pkg -target /
 ```
 
-Add your shares in the app, for example `smb://fileserver.example.com/team`. Then press
-the link button of each share once and choose **Remember this password in my keychain**,
-so the background service can mount without asking.
-
-## Configuration
-
-The app writes `~/.config/mountwell/shares.conf`, one share per line, with an optional
-list of IP prefixes and an optional alias after `#`. A leading `!` switches a share off:
+The drives are kept in `~/.config/mountwell/shares.conf`, one per line, with an optional
+list of IP prefixes and an optional alias after `#`. A leading `!` switches a drive off:
 
 ```
 smb://fileserver.example.com/team
@@ -43,24 +102,20 @@ smb://nas.example.com/photos 192.168.10. # Photos at home
 !smb://fileserver.example.com/archive
 ```
 
-If a server name stops resolving, for example when the VPN's DNS breaks, the background
-service mounts via the server's last known IP address, from the same network only. Connect
-once via that address (right-click the share) so its password is in the keychain too.
+While a server name resolves, the background service remembers the server's IP address,
+network and SMB server ID in `~/.config/mountwell/servers.yaml`. If the name later stops
+resolving, for example when the VPN's DNS breaks, it connects via that address, from the
+same network only and only if the same server answers. Connect once via the address
+(right-click the drive) so its password is in the keychain too.
 
-The log is `~/Library/Logs/mountwell.log`.
-
-## Uninstall
-
-```sh
-sudo "/Applications/Mountwell.app/Contents/Resources/uninstall.sh"
-```
-
-The configuration in `~/.config/mountwell` stays.
+The log is `~/Library/Logs/mountwell.log`. Releases are signed with a Developer ID and
+notarized by Apple; the app installs only updates signed by the same developer.
 
 ## Development
 
 ```sh
-./build.sh      # tests, then build/Mountwell-<version>.pkg
+./build.sh             # tests, then build/Mountwell-<version>.pkg
+tools/screenshot.sh    # the pictures in docs/, from the real views
 ```
 
 - [`docs/spec.md`](docs/spec.md): what Mountwell must do

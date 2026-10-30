@@ -193,8 +193,10 @@ still applies.
 
 ## Screenshot
 
-- `tools/screenshot.sh` renders `ContentView` with `Model(live: false)` and example
-  shares. `-D SCREENSHOT` drops `@main`.
+- `tools/screenshot.sh` renders `ContentView`, `ShareEditor` and `ImportSheet` with
+  `Model(live: false)` and example shares into `docs/screenshot*.png`. `-D SCREENSHOT`
+  drops `@main` and the version in the status bar: a version in the README pictures was
+  out of date after the next release.
 - An offscreen capture misses Liquid Glass, so `SCREENSHOT` builds use a light fill.
 - `screencapture -l` needs Screen Recording and would show the real configuration.
 
