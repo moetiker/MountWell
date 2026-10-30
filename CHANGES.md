@@ -14,9 +14,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### New
 
 ### Changed
-- Mountwell is signed with a Developer ID and notarized by Apple: the package opens without "Open Anyway". From this version on, Mountwell installs only updates signed by its developer, after the administrator password and without the Installer window.
 
 ### Fixed
+
+## 0.3.1 - 2026-10-30
+### Changed
+- Mountwell is signed with a Developer ID and notarized by Apple: the package opens without "Open Anyway". From this version on, Mountwell installs only updates signed by its developer, after the administrator password and without the Installer window.
 
 ## 0.3.0 - 2026-10-29
 ### New
