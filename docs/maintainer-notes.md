@@ -45,11 +45,11 @@ still applies.
   from the plist output and prints the log on anything but "Accepted".
 - `AssociatedBundleIdentifiers` in the LaunchAgent only shows "MountWell" in Login Items
   when app and agent come from a team-signed package (I-6).
-- CI: `MACOS_CERTS_P12` holds both certificates in one .p12 (base64),
-  `MACOS_CERTS_PASSWORD` its password, `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and
-  `NOTARY_ISSUER` the App Store Connect API key. They go into a temporary keychain;
-  `set-key-partition-list` keeps `codesign` from asking for the keychain password.
-  `release-build.yml` passes the secrets on with `secrets: inherit`.
+- CI: `release-build.yml` calls repo-infra's `ri-release-macos-signed`, which takes
+  `MACOS_CERTS_P12` (both certificates in one .p12, base64), `MACOS_CERTS_PASSWORD`,
+  `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and `NOTARY_ISSUER`, puts the certificates into a
+  temporary keychain, runs `build.sh` and then notarizes, staples and checks the package.
+  `build.sh` gets `NOTARIZE=0` there, so the package is submitted once.
 - With the secrets set, `REQUIRE_SIGNING=1`: a release with `TEAM_ID` in it makes every
   installed app reject unsigned updates from then on.
 
@@ -184,7 +184,8 @@ still applies.
   release. Without it a lost signing secret builds an unsigned release, which every
   signed client then refuses, every day.
 
-- No repo-infra piece builds Swift, so `ci-local.yml` and `release-build-local.yml` do.
+- No repo-infra piece builds Swift, so `ci-local.yml` does; the release build is
+  `ri-release-macos-signed` running `build.sh`.
 - `macos-26` runners provide the Liquid Glass SDK; Intel is cross-compiled with
   `-target x86_64-apple-macos14.0`.
 - `build.sh` reads `VERSION` unless the environment sets it.
