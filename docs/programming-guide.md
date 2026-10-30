@@ -10,7 +10,7 @@ Liquid Glass). No Xcode project and no dependencies.
 
 ```sh
 tests/run.sh            # all tests
-./build.sh              # tests, then build/Mountwell-<VERSION>.pkg
+./build.sh              # tests, then build/MountWell-<VERSION>.pkg
 VERSION=0.0.9 ./build.sh
 tools/screenshot.sh     # renders docs/screenshot.png from example shares
 ```
@@ -32,7 +32,7 @@ SIGN_APP= SIGN_PKG= TEAM_ID= ./build.sh   # unsigned, as without certificates
 - `app/Model.swift`: the state behind window and menu bar; reads and writes the files
   in `~/.config/mountwell/` under the script's lock. Mounts only on explicit Mount and
   Eject.
-- `app/Mountwell.swift`: paths, entry point, menu commands, app delegate.
+- `app/MountWell.swift`: paths, entry point, menu commands, app delegate.
 - `app/MainWindow.swift`, `ShareEditor.swift`, `Import.swift`, `Help.swift`,
   `MenuBar.swift`, `Glass.swift`: the views, one file per window or menu.
 - `app/Updater.swift`: update check and install (U-1 to U-4).

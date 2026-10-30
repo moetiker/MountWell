@@ -4,8 +4,8 @@
 <dict>
     <key>Label</key><string>ch.oetiker.mountwell</string>
     <key>ProgramArguments</key>
-    <array><string>/Applications/Mountwell.app/Contents/Resources/mountwell</string></array>
-    <!-- show as "Mountwell" in System Settings → Login Items instead of as a script -->
+    <array><string>/Applications/MountWell.app/Contents/Resources/mountwell</string></array>
+    <!-- show as "MountWell" in System Settings → Login Items instead of as a script -->
     <key>AssociatedBundleIdentifiers</key>
     <array><string>ch.oetiker.mountwell.app</string></array>
     <key>LimitLoadToSessionType</key><string>Aqua</string>

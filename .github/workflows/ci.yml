@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 jobs:
-  # Mountwell's own job: tests and the Universal app and package on macOS.
+  # MountWell's own job: tests and the Universal app and package on macOS.
   # No repo-infra piece builds Swift; ci-local.yml holds it.
   macos:
     if: ${{ !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'github-actions[bot]') }}

@@ -1,6 +1,6 @@
 name: Release build (macOS)
 
-# Builds Mountwell-<version>.pkg for the release, called from release-build.yml.
+# Builds MountWell-<version>.pkg for the release, called from release-build.yml.
 # The package is the release asset the app's updater downloads.
 on:
   workflow_call:
@@ -67,14 +67,14 @@ jobs:
       - name: Check the signature
         if: steps.certs.outputs.signed == '1'
         env:
-          PKG: build/Mountwell-${{ inputs.version }}.pkg
+          PKG: build/MountWell-${{ inputs.version }}.pkg
         run: |
           pkgutil --check-signature "$PKG" | tee "$RUNNER_TEMP/signature.txt"
           grep -q "Status: signed by a developer certificate issued by Apple for distribution" "$RUNNER_TEMP/signature.txt"
           grep -qE "1\. Developer ID Installer: .+ \([A-Z0-9]{10}\)$" "$RUNNER_TEMP/signature.txt"
           spctl --assess --type install -vv "$PKG"
           xcrun stapler validate "$PKG"
-          plutil -extract MountwellTeamID raw -o - build/root/Applications/Mountwell.app/Contents/Info.plist \
+          plutil -extract MountWellTeamID raw -o - build/root/Applications/MountWell.app/Contents/Info.plist \
               | grep -qE '^[A-Z0-9]{10}$'
 
       # a fresh VM today, but the key and the keychain must not outlive the job on a
@@ -89,5 +89,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-asset-pkg
-          path: build/Mountwell-${{ inputs.version }}.pkg
+          path: build/MountWell-${{ inputs.version }}.pkg
           if-no-files-found: error

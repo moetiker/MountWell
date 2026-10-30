@@ -1,6 +1,6 @@
 #!/bin/bash
-# Removes Mountwell (app and background service).
-# Usage: sudo "/Applications/Mountwell.app/Contents/Resources/uninstall.sh"
+# Removes MountWell (app and background service).
+# Usage: sudo "/Applications/MountWell.app/Contents/Resources/uninstall.sh"
 # The configuration in ~/.config/mountwell is kept.
 main() {
     LABEL=ch.oetiker.mountwell
@@ -12,9 +12,9 @@ main() {
         launchctl bootout "gui/$uid/$LABEL" 2>/dev/null
     done
     rm -f "/Library/LaunchAgents/$LABEL.plist"
-    rm -rf "/Applications/Mountwell.app"
+    rm -rf "/Applications/MountWell.app"
     pkgutil --forget "$LABEL" >/dev/null 2>&1
-    echo "Mountwell uninstalled (configuration kept)"
+    echo "MountWell uninstalled (configuration kept)"
 }
 main "$@"
 exit

@@ -185,7 +185,7 @@ servers_table() {
 write_servers() {
     awk '
         BEGIN {
-            print "# Servers that answered, written by the Mountwell background service."
+            print "# Servers that answered, written by the MountWell background service."
             print "# Used when a name does not resolve (Help: \"When DNS fails\")."
             print "# Remove an entry, or use Forget Remembered Server, to learn it again."
         }

@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>Mountwell</string>
-    <key>CFBundleDisplayName</key><string>Mountwell</string>
-    <key>CFBundleExecutable</key><string>Mountwell</string>
+    <key>CFBundleName</key><string>MountWell</string>
+    <key>CFBundleDisplayName</key><string>MountWell</string>
+    <key>CFBundleExecutable</key><string>MountWell</string>
     <key>CFBundleIdentifier</key><string>ch.oetiker.mountwell.app</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>@VERSION@</string>
@@ -17,8 +17,8 @@
     <key>NSHumanReadableCopyright</key><string>© 2026 Manuel Oetiker</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>MountwellUpdateRepo</key><string>@REPO@</string>
-    <key>MountwellTeamID</key><string>@TEAM_ID@</string>
-    <key>NSLocalNetworkUsageDescription</key><string>Mountwell checks whether the servers of your shares respond on the local network.</string>
+    <key>MountWellUpdateRepo</key><string>@REPO@</string>
+    <key>MountWellTeamID</key><string>@TEAM_ID@</string>
+    <key>NSLocalNetworkUsageDescription</key><string>MountWell checks whether the servers of your shares respond on the local network.</string>
 </dict>
 </plist>

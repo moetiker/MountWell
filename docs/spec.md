@@ -1,11 +1,11 @@
-# Mountwell specification
+# MountWell specification
 
-What Mountwell must do. Issues, commits and tests refer to the numbers (for example
+What MountWell must do. Issues, commits and tests refer to the numbers (for example
 "M-4"). Reasons are in `docs/maintainer-notes.md`.
 
 ## 1. Purpose
 
-Mountwell mounts SMB shares on macOS 14 or later while their server is reachable and
+MountWell mounts SMB shares on macOS 14 or later while their server is reachable and
 unmounts them when it is not, so Finder never hangs on a dead share.
 
 Out of scope: AFP, NFS, WebDAV, password management (the keychain does that), server
@@ -72,7 +72,7 @@ configuration, the Mac App Store.
 - **C-3** `~/.config/mountwell/ejected` lists ejected shares, one lower-case
   `server/share` per line. The app adds, the service removes (M-6).
 - **C-4** Configuration and log of the predecessor "SMB Automount" are moved over unless
-  Mountwell's already exist.
+  MountWell's already exist.
 - **C-5** `~/.config/mountwell/servers.yaml`, written by the service: a list `servers`
   with `name`, `ip`, `network` (own /24 prefix), `router` (MAC, `-` over VPN), `server_id`
   and `seen`, all quoted strings; one entry per server name or configured IP. Entries
@@ -107,7 +107,7 @@ configuration, the Mac App Store.
 - **A-10** A menu bar icon shows the overall state. Its menu lists each share by its alias,
   or else as `server/share`, and offers per share Show in Finder, Eject or Mount, plus
   a per-share Mount Automatically switch (A-17), plus Mount Automatically, Check Now,
-  Import Mounted Shares (A-18), Open Mountwell, Run at Login, Show Window at Login,
+  Import Mounted Shares (A-18), Open MountWell, Run at Login, Show Window at Login,
   Check for Updates and Quit.
 - **A-11** Closing the window removes the Dock icon; the menu bar icon stays. Started as
   a login item, the app shows no window unless Show Window at Login is on or no share is
@@ -138,7 +138,7 @@ configuration, the Mac App Store.
 ## 6. Installation and removal
 
 - **I-1** A Universal installer package for macOS 14 or later installs
-  `/Applications/Mountwell.app` and the system-wide LaunchAgent `ch.oetiker.mountwell`.
+  `/Applications/MountWell.app` and the system-wide LaunchAgent `ch.oetiker.mountwell`.
 - **I-2** Installing loads the service for all logged-in users and opens the app for users
   without a configuration.
 - **I-7** Installing acts only on logged-in users with a uid of 501 or more, not on the
@@ -147,7 +147,7 @@ configuration, the Mac App Store.
 - **I-4** Installing removes SMB Automount and takes over its configuration (C-4).
 - **I-5** An uninstaller in the app bundle removes app and service, keeps the
   configuration.
-- **I-6** Login Items in System Settings show the service as Mountwell.
+- **I-6** Login Items in System Settings show the service as MountWell.
 
 ## 7. Updates
 

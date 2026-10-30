@@ -74,14 +74,14 @@ struct MenuBarMenu: View {
             m.findImports()
         }
         Divider()
-        Button("Open Mountwell…") { showWindow("main", openWindow) }
+        Button("Open MountWell…") { showWindow("main", openWindow) }
         LoginToggles(m: m)
         if updateRepo != nil {
             Button("Check for Updates…") { Task { await updater.check(manual: true) } }
                 .disabled(updater.busy)
         }
         Divider()
-        Button("Quit Mountwell") { NSApp.terminate(nil) }
+        Button("Quit MountWell") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 

@@ -7,7 +7,7 @@ still applies.
 
 - The predecessor was "SMB Automount" (`ch.oetiker.smb-automount`, package 1.0).
   `postinstall` removes it; script and `postinstall` move its configuration and log.
-- "Mountly" is taken by a macOS mount app. "Mountwell" was free in October 2026.
+- "Mountly" is taken by a macOS mount app. "MountWell" was free in October 2026.
 - The icon is drawn by `app/make-icon.swift`; the SF Symbol license forbids app icons.
 
 ## Language
@@ -43,7 +43,7 @@ still applies.
   the app starts `osascript`, `nc` and `pkgutil` as separate processes.
 - `notarytool submit --wait` exits 0 also for "Invalid", so `build.sh` reads the status
   from the plist output and prints the log on anything but "Accepted".
-- `AssociatedBundleIdentifiers` in the LaunchAgent only shows "Mountwell" in Login Items
+- `AssociatedBundleIdentifiers` in the LaunchAgent only shows "MountWell" in Login Items
   when app and agent come from a team-signed package (I-6).
 - CI: `MACOS_CERTS_P12` holds both certificates in one .p12 (base64),
   `MACOS_CERTS_PASSWORD` its password, `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and
@@ -128,7 +128,7 @@ still applies.
   checked in `~/Library/Caches` and then opened in Installer, which reads it much later;
   anything running as the user could swap it in between and get the administrator
   password typed for its own package. The app runs `install-update` only from
-  `/Applications/Mountwell.app` and only if root owns it.
+  `/Applications/MountWell.app` and only if root owns it.
 - `smb-id` lives in `Contents/MacOS`, not `Resources`, so `codesign` treats it as nested
   code; notarization needs it signed with the hardened runtime before the bundle.
 - The keychain entry belongs to the string in the URL. Mounting `smb://<ip>/share` without
@@ -164,7 +164,7 @@ still applies.
   `keyAELaunchedAsLogInItem` and closes the window.
 - `NSLocalNetworkUsageDescription` is needed because `nc` probes the local network
   (macOS 15).
-- Updates read `MountwellUpdateRepo` from `Info.plist`. The anonymous API allows 60
+- Updates read `MountWellUpdateRepo` from `Info.plist`. The anonymous API allows 60
   requests per hour and returns 404 for private repositories.
 - `URLSession` downloads carry no quarantine, so Installer opens the package without
   Gatekeeper. Anyone who can publish releases could ship root code, so a build with
@@ -172,7 +172,7 @@ still applies.
   certificate whose name ends in that team ID. Older certificates without the team ID
   in the name (XQuartz 2.7.8, 2015) are rejected. A build without `TEAM_ID`, such as
   0.0.3, installs any package.
-- The cached package is always `Mountwell-Update.pkg`; a version from the network does
+- The cached package is always `MountWell-Update.pkg`; a version from the network does
   not belong in a path.
 
 ## CI and releases
