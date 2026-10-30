@@ -16,6 +16,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 ### Fixed
+- Homebrew installs 0.4.0. Homebrew 7 loads the cask only after `brew trust moetiker/mountwell`; the README now says so.
 
 ## 0.4.0 - 2026-10-30
 ### New
