@@ -26,21 +26,23 @@ SIGN_APP= SIGN_PKG= TEAM_ID= ./build.sh   # unsigned, as without certificates
 
 ## Architecture
 
-- `mountwell.sh`: run by launchd, does all automatic mounting.
+- `mountwell.sh`: run by launchd through `app/agent/`, does all automatic mounting.
 - `app/Core.swift`: logic without UI (parsing, name resolution, mount table matching,
   versions, releases). Testable logic goes here.
 - `app/Model.swift`: the state behind window and menu bar; reads and writes the files
-  in `~/.config/mountwell/` under the script's lock. Mounts only on explicit Mount and
+  in `~/Library/Application Support/MountWell/` under the script's lock. Mounts only on explicit Mount and
   Eject.
 - `app/MountWell.swift`: paths, entry point, menu commands, app delegate.
 - `app/MainWindow.swift`, `ShareEditor.swift`, `Import.swift`, `Help.swift`,
   `MenuBar.swift`, `Glass.swift`: the views, one file per window or menu.
 - `app/Updater.swift`: update check and install (U-1 to U-4).
 - `app/smb-id/`: prints a server's SMB ServerGuid for the script (M-12).
+- `app/agent/`: `mountwell-agent`, the signed program the LaunchAgent starts; runs the
+  script (I-6).
 - `app/install-update.sh`: checks and installs a signed update as root (U-4).
 - `app/de.lproj/`: German translation.
 
-App and script talk through the files in `~/.config/mountwell/` (spec section 3). A new
+App and script talk through the files in `~/Library/Application Support/MountWell/` (spec section 3). A new
 setting is a new file or line format, documented in the spec and the script header.
 
 ## Conventions

@@ -2,18 +2,18 @@
 # mountwell: mounts SMB shares only while their server is reachable
 # (right network or VPN up) and unmounts them again when it is not.
 #
-# Configuration: ~/.config/mountwell/shares.conf
+# Configuration: ~/Library/Application Support/MountWell/shares.conf
 #   [!]smb://user@server/share  [IP prefixes, comma-separated]  [# alias]
 # The alias after "#" is a display name for the app; this script ignores it.
 # A share starting with "!" is disabled: it is neither mounted nor unmounted. While it is
 # mounted by hand, its server is still remembered (see servers.yaml below).
 # The optional second field also restricts mounting to networks,
 # e.g. "10.46.,192.168.1." (one of our own IPs must start with one of them).
-# If ~/.config/mountwell/disabled exists, nothing happens.
-# Shares listed in ~/.config/mountwell/ejected (one server/share per line, written
+# If disabled exists there, nothing happens.
+# Shares listed in ejected (one server/share per line, written
 # by the app's eject button) are not mounted again until the entry is removed:
 # by mounting them again, or when the server is out of reach.
-# ~/.config/mountwell/servers.yaml remembers each server that answered: its IP, the
+# servers.yaml remembers each server that answered: its IP, the
 # network it was reached through (own /24 prefix and router MAC, "-" over VPN) and its
 # SMB server ID. When a name does not resolve, the share is mounted via the remembered IP, but only from
 # the same network (prefix and router), only if the keychain holds an SMB password for the
@@ -21,7 +21,7 @@
 # remembered on its first mount; later mounts need the same network and server ID too.
 
 set -u
-CONFDIR="$HOME/.config/mountwell"
+CONFDIR="$HOME/Library/Application Support/MountWell"
 CONF="${MOUNTWELL_CONF:-$CONFDIR/shares.conf}"
 LOG="${MOUNTWELL_LOG:-$HOME/Library/Logs/mountwell.log}"
 PORT=445
@@ -42,10 +42,14 @@ log() {
     return 0
 }
 
-# take over configuration and log from the predecessor "SMB Automount"
-if [ -d "$HOME/.config/smb-automount" ] && [ ! -e "$CONFDIR" ]; then
-    mv "$HOME/.config/smb-automount" "$CONFDIR"
-fi
+# take over the configuration of MountWell 0.4 and earlier (~/.config/mountwell) or of the
+# predecessor "SMB Automount", and the latter's log
+for old in "$HOME/.config/mountwell" "$HOME/.config/smb-automount"; do
+    if [ -d "$old" ] && [ ! -e "$CONFDIR" ]; then
+        mkdir -p "$(dirname "$CONFDIR")"
+        mv "$old" "$CONFDIR"
+    fi
+done
 if [ -e "$HOME/Library/Logs/smb-automount.log" ] && [ ! -e "$HOME/Library/Logs/mountwell.log" ]; then
     mv "$HOME/Library/Logs/smb-automount.log" "$HOME/Library/Logs/mountwell.log"
 fi

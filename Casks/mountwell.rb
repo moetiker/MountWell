@@ -22,6 +22,7 @@ cask "mountwell" do
             ]
 
   zap trash: [
+    "~/Library/Application Support/MountWell",
     "~/.config/mountwell",
     "~/Library/Logs/mountwell.log",
   ]

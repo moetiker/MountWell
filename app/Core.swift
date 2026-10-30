@@ -17,6 +17,17 @@ func run(_ path: String, _ args: [String]) -> (status: Int32, output: String) {
     return (p.terminationStatus, String(decoding: data, as: UTF8.self))
 }
 
+// Moves the first older settings folder that exists to dir, unless dir exists already
+// (C-4). mountwell.sh and the installer do the same; whichever runs first moves them.
+func moveConfig(to dir: URL, from old: [URL]) {
+    let fm = FileManager.default
+    guard !fm.fileExists(atPath: dir.path),
+          let src = old.first(where: { fm.fileExists(atPath: $0.path) })
+    else { return }
+    try? fm.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? fm.moveItem(at: src, to: dir)
+}
+
 func smbReachable(_ host: String) -> Bool {
     run("/usr/bin/nc", ["-z", "-G", "2", host, "445"]).status == 0
 }
@@ -252,7 +263,7 @@ func mountPoint(of hostShare: String, in mountOutput: String) -> String? {
     return nil
 }
 
-// ~/.config/mountwell/servers.yaml, written by mountwell.sh: a list under "servers:" of
+// servers.yaml in the settings folder, written by mountwell.sh: a list under "servers:" of
 // name, ip, network, router, server_id and seen, one entry per name and network.
 // Lower-case name → its IPs in file order, for entries with all fields, as the script
 // reads them.

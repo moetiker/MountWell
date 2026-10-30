@@ -43,8 +43,11 @@ still applies.
   the app starts `osascript`, `nc` and `pkgutil` as separate processes.
 - `notarytool submit --wait` exits 0 also for "Invalid", so `build.sh` reads the status
   from the plist output and prints the log on anything but "Accepted".
-- `AssociatedBundleIdentifiers` in the LaunchAgent only shows "MountWell" in Login Items
-  when app and agent come from a team-signed package (I-6).
+- `AssociatedBundleIdentifiers` in the LaunchAgent only ties the job to the app when its
+  program is signed by the app's team. With the script as program, Login Items listed a
+  "legacy agent" from "Unknown Developer"; hence `mountwell-agent` (I-6). It runs the
+  script as a child rather than exec'ing it, so the signed program stays the responsible
+  process. Check with `sfltool dumpbtm`.
 - CI: `MACOS_CERTS_P12` holds both certificates in one .p12 (base64),
   `MACOS_CERTS_PASSWORD` its password, `NOTARY_KEY_P8`, `NOTARY_KEY_ID` and
   `NOTARY_ISSUER` the App Store Connect API key. They go into a temporary keychain;

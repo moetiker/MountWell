@@ -5,6 +5,8 @@ set -u
 cd "$(dirname "$0")/.."
 SCRIPT="${MOUNTWELL_SCRIPT:-$PWD/mountwell.sh}"
 T=$(mktemp -d)
+# the settings folder of the test home (C-1)
+C="$T/home/Library/Application Support/MountWell"
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"
 
@@ -97,8 +99,8 @@ fail=0
 # setup <conf> <reachable hosts> <mount lines>
 setup() {
     rm -rf "$T/home" "$T/calls" "$T/reachable" "$T/mounts" "$T/flaky" "$T/busy" "$T/dns" "$T/keychain" "$T/ids"
-    mkdir -p "$T/home/.config/mountwell"
-    printf '%b' "$1" > "$T/home/.config/mountwell/shares.conf"
+    mkdir -p "$C"
+    printf '%b' "$1" > "$C/shares.conf"
     printf '%b' "$2" > "$T/reachable"
     printf '%b' "$3" > "$T/mounts"
     touch "$T/calls"
@@ -215,12 +217,12 @@ runit
 expect "disabled share does not stop the others" 'osascript mount smb://fileserver.example.com/team'
 
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
-touch "$T/home/.config/mountwell/disabled"
+touch "$C/disabled"
 runit
 expect "disabled → do nothing" 'nc|osascript|diskutil' nogrep
 
 # remembered servers: DNS fallback and servers configured by IP
-A="$T/home/.config/mountwell/servers.yaml"
+A="$C/servers.yaml"
 LOGF="$T/home/Library/Logs/mountwell.log"
 MIP='//anna@10.46.1.20/team on /Volumes/team (smbfs, nodev, nosuid, mounted by anna)\n'
 NET="10.46.105. aa:bb:cc:0:11:22"
@@ -314,7 +316,7 @@ runit
 expect "mounted via IP, IP gone → unmounted" 'diskutil unmount force /Volumes/team'
 
 fallback '10.46.1.20\n' ''
-echo "fileserver.example.com/team" > "$T/home/.config/mountwell/ejected"
+echo "fileserver.example.com/team" > "$C/ejected"
 runit
 expect "ejected share is not mounted via IP either" 'osascript' nogrep
 
@@ -371,17 +373,17 @@ STUB_MAC=12:34:56:10:20:30 runit
 grep -qxF '    router: "12:34:56:10:20:30"' "$A" && grep -qxF '  - name: "fileserver.example.com"' "$A" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: servers.yaml quotes its values"; cat "$A"; }
 setup 'smb://anna@fileserver.example.com/team\n' '' ''
-printf '%s\nold.example.com 10.1.1.1 10.1.1.\n10.9.9.9 10.9.9.9 10.9.9. - ab12\n' "$ENTRY" > "$T/home/.config/mountwell/addresses"
+printf '%s\nold.example.com 10.1.1.1 10.1.1.\n10.9.9.9 10.9.9.9 10.9.9. - ab12\n' "$ENTRY" > "$C/addresses"
 runit
 check "old addresses file → entry converted" "$A" "$ENTRY"
 check "old addresses file → IP entry converted" "$A" "10.9.9.9 10.9.9.9 10.9.9. - ab12"
 check "old addresses file → three-field line dropped" "$A" "old.example.com 10.1.1.1 10.1.1." absent
-[ ! -e "$T/home/.config/mountwell/addresses" ] && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: old addresses file removed after converting"; }
+[ ! -e "$C/addresses" ] && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: old addresses file removed after converting"; }
 
 # one run at a time
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 sleep 30 & holder=$!
-shlock -f "$T/home/.config/mountwell/.run.lock" -p $holder
+shlock -f "$C/.run.lock" -p $holder
 HOME="$T/home" STUB="$T" MOUNTWELL_RETRY_DELAY=0 MOUNTWELL_LOCK_WAIT=0 MOUNTWELL_SMBID="$T/bin/smb-id" PATH="$T/bin:$PATH" bash "$SCRIPT" --now >/dev/null 2>&1
 kill $holder 2>/dev/null; wait $holder 2>/dev/null
 expect "another run holds the lock → nothing done" 'nc|osascript' nogrep
@@ -478,7 +480,7 @@ runit
 expect "configured by IP, other server at the IP → not mounted" 'osascript' nogrep
 
 setup '' 'fileserver.example.com\n' ''
-rm "$T/home/.config/mountwell/shares.conf"
+rm "$C/shares.conf"
 runit && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: exit code ≠ 0 without configuration"; }
 
 setup '# comment\n\n   \nsmb://a.example/x\n# smb://b.example/y\n' 'a.example\nb.example\n' ''
@@ -502,7 +504,7 @@ runit
 expect "host suffix does not count as mounted" 'osascript mount smb://example.com/team'
 
 # ejected by hand in the app
-E="$T/home/.config/mountwell/ejected"
+E="$C/ejected"
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 echo "FileServer.Example.com/team" > "$E"
 runit
@@ -536,21 +538,37 @@ expect "mounted again by hand → leave it mounted" 'diskutil|osascript' nogrep
 
 # predecessor SMB Automount: configuration and log are taken over
 setup '' 'fileserver.example.com\n' ''
-rm -rf "$T/home/.config/mountwell"
+rm -rf "$C"
 mkdir -p "$T/home/.config/smb-automount" "$T/home/Library/Logs"
 printf 'smb://fileserver.example.com/team\n' > "$T/home/.config/smb-automount/shares.conf"
 echo "old entry" > "$T/home/Library/Logs/smb-automount.log"
 runit
 expect "old configuration taken over → mount" 'osascript mount smb://fileserver.example.com/team'
-[ -e "$T/home/.config/mountwell/shares.conf" ] && [ ! -e "$T/home/.config/smb-automount" ] \
+[ -e "$C/shares.conf" ] && [ ! -e "$T/home/.config/smb-automount" ] \
     && grep -q "old entry" "$T/home/Library/Logs/mountwell.log" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: configuration/log not taken over"; }
 
 setup 'smb://neu.example/x\n' '' ''
 mkdir -p "$T/home/.config/smb-automount"
 runit
-[ -e "$T/home/.config/smb-automount" ] && grep -q neu.example "$T/home/.config/mountwell/shares.conf" \
+[ -e "$T/home/.config/smb-automount" ] && grep -q neu.example "$C/shares.conf" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: existing MountWell configuration overwritten"; }
+
+# MountWell 0.4 and earlier: ~/.config/mountwell moves to Application Support
+setup '' 'fileserver.example.com\n' ''
+rm -rf "$T/home/Library/Application Support"
+mkdir -p "$T/home/.config/mountwell"
+printf 'smb://fileserver.example.com/team\n' > "$T/home/.config/mountwell/shares.conf"
+runit
+expect "configuration in ~/.config taken over → mount" 'osascript mount smb://fileserver.example.com/team'
+[ -e "$C/shares.conf" ] && [ ! -e "$T/home/.config/mountwell" ] \
+    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: ~/.config/mountwell not moved"; }
+
+setup 'smb://neu.example/x\n' '' ''
+mkdir -p "$T/home/.config/mountwell"
+runit
+[ -e "$T/home/.config/mountwell" ] && grep -q neu.example "$C/shares.conf" \
+    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: configuration in Application Support overwritten"; }
 
 echo "$pass/$((pass + fail)) script tests ok"
 [ $fail = 0 ]
