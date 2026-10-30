@@ -21,9 +21,8 @@ macOS 14 or later, Apple silicon or Intel.
 ## Install
 
 Download `Mountwell-<version>.pkg` from the
-[latest release](https://github.com/moetiker/mountwell/releases/latest) and open it.
-The package is not signed with a Developer ID, so choose **Open Anyway** in
-*System Settings → Privacy & Security*, or install it in Terminal:
+[latest release](https://github.com/moetiker/mountwell/releases/latest) and open it, or
+install it in Terminal:
 
 ```sh
 sudo installer -pkg Mountwell-<version>.pkg -target /
