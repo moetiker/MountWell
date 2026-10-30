@@ -1,0 +1,93 @@
+name: Release build (macOS)
+
+# Builds MountWell-<version>.pkg for the release, called from release-build.yml.
+# The package is the release asset the app's updater downloads.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version being released.
+        type: string
+        required: true
+      ref:
+        description: The release branch head to build.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build the package
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # Developer ID Application and Installer, exported together as one .p12 (base64).
+      # Without the secret the release is built unsigned, unless the repository variable
+      # REQUIRE_SIGNED_RELEASES is 1: set it once releases are signed, so a lost or renamed
+      # secret fails the release instead of shipping one that every client rejects.
+      - name: Import the signing certificates
+        id: certs
+        env:
+          MACOS_CERTS_P12: ${{ secrets.MACOS_CERTS_P12 }}
+          MACOS_CERTS_PASSWORD: ${{ secrets.MACOS_CERTS_PASSWORD }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          [ -n "$MACOS_CERTS_P12" ] || { echo "signed=0" >> "$GITHUB_OUTPUT"; exit 0; }
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          pw=$(uuidgen)
+          security create-keychain -p "$pw" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$pw" "$kc"
+          printf '%s' "$MACOS_CERTS_P12" | base64 --decode > "$RUNNER_TEMP/certs.p12"
+          security import "$RUNNER_TEMP/certs.p12" -k "$kc" -P "$MACOS_CERTS_PASSWORD" \
+              -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/productsign
+          rm "$RUNNER_TEMP/certs.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          printf '%s' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          echo "signed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Test and build
+        env:
+          VERSION: ${{ inputs.version }}
+          REQUIRE_SIGNING: ${{ (steps.certs.outputs.signed == '1' || vars.REQUIRE_SIGNED_RELEASES == '1') && '1' || '0' }}
+          NOTARY_KEY: ${{ steps.certs.outputs.signed == '1' && format('{0}/notary.p8', runner.temp) || '' }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: ./build.sh
+
+      # what the clients will check, checked before the package is published: signed by a
+      # Developer ID Installer of the team, accepted by Gatekeeper, notarization stapled
+      - name: Check the signature
+        if: steps.certs.outputs.signed == '1'
+        env:
+          PKG: build/MountWell-${{ inputs.version }}.pkg
+        run: |
+          pkgutil --check-signature "$PKG" | tee "$RUNNER_TEMP/signature.txt"
+          grep -q "Status: signed by a developer certificate issued by Apple for distribution" "$RUNNER_TEMP/signature.txt"
+          grep -qE "1\. Developer ID Installer: .+ \([A-Z0-9]{10}\)$" "$RUNNER_TEMP/signature.txt"
+          spctl --assess --type install -vv "$PKG"
+          xcrun stapler validate "$PKG"
+          plutil -extract MountWellTeamID raw -o - build/root/Applications/MountWell.app/Contents/Info.plist \
+              | grep -qE '^[A-Z0-9]{10}$'
+
+      # a fresh VM today, but the key and the keychain must not outlive the job on a
+      # self-hosted runner either
+      - name: Remove the signing keychain and the notary key
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/certs.p12"
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-asset-pkg
+          path: build/MountWell-${{ inputs.version }}.pkg
+          if-no-files-found: error

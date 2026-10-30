@@ -13,10 +13,9 @@ SIGN_PKG="${SIGN_PKG-$(security find-identity -v -p basic | sed -n 's/.*"\(Devel
 # Apple team ID; when set, the app installs only updates signed by that team's Developer ID.
 # Taken from the installer certificate "Developer ID Installer: Name (TEAMID)".
 TEAM_ID="${TEAM_ID-$(printf '%s' "$SIGN_PKG" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')}"
-# notarization: a profile saved with "xcrun notarytool store-credentials". The release
-# build sets NOTARIZE=0: ri-release-macos-signed notarizes and staples the package itself.
+# notarization: a profile saved with "xcrun notarytool store-credentials", or in CI an
+# App Store Connect API key (NOTARY_KEY = path to the .p8, NOTARY_KEY_ID, NOTARY_ISSUER)
 NOTARY_PROFILE="${NOTARY_PROFILE:-mountwell}"
-NOTARIZE="${NOTARIZE:-1}"
 # a release must not ship unsigned: with REQUIRE_SIGNING=1 a missing piece is an error
 REQUIRE_SIGNING="${REQUIRE_SIGNING:-0}"
 
@@ -96,8 +95,10 @@ else
     productbuild --package "$B/component.pkg" "$PKG"
 fi
 
-if [ -n "$SIGN_APP" ] && [ -n "$SIGN_PKG" ] && [ "$NOTARIZE" = 1 ]; then
-    if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+if [ -n "$SIGN_APP" ] && [ -n "$SIGN_PKG" ]; then
+    if [ -n "${NOTARY_KEY:-}" ]; then
+        notary=(--key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")
+    elif xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
         notary=(--keychain-profile "$NOTARY_PROFILE")
     else
         notary=()
