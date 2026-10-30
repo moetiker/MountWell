@@ -1,7 +1,7 @@
 # Homebrew cask for MountWell. This repository is its own tap.
 cask "mountwell" do
-  version "0.4.0"
-  sha256 "cb7a4695d41ccf2ebba24feb33119280ab37ab8e56ab7e3eb792f0d16005742c"
+  version "0.4.1"
+  sha256 "a719adb97ede2255f28dace848fe569b5a129d162771cf1ab7299d4fc3c5a706"
 
   url "https://github.com/moetiker/MountWell/releases/download/v#{version}/MountWell-#{version}.pkg"
   name "MountWell"
