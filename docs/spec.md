@@ -189,6 +189,8 @@ configuration, the Mac App Store.
 ## 9. Known limits
 
 - An unsigned build (no Developer ID certificates) needs "Open Anyway" the first time.
+  Releases from 0.3.1 on are signed; installs of 0.3.0 and earlier take the first signed
+  update without a signature check, since they have no team ID to check against.
 - An eject in Finder is not remembered; the service mounts the share again.
 - Hanging DNS lookups are not bounded by the 2-second timeout.
 - The UI is not tested automatically.
