@@ -24,6 +24,15 @@ itself in English or German, following your Mac's language.
 3. MountWell opens by itself. From now on it also sits in the menu bar at the top of the
    screen.
 
+With [Homebrew](https://brew.sh), install it in Terminal instead:
+
+```sh
+brew tap moetiker/mountwell https://github.com/moetiker/MountWell
+brew install --cask mountwell
+```
+
+MountWell updates itself; Homebrew leaves that to the app.
+
 ## Add a drive
 
 1. Click **+** in the MountWell window.
@@ -84,6 +93,9 @@ sudo "/Applications/MountWell.app/Contents/Resources/uninstall.sh"
 ```
 
 Your list of drives stays in `~/.config/mountwell`, in case you install MountWell again.
+
+Installed with Homebrew: `brew uninstall --cask mountwell`, or with `--zap` to remove the
+list of drives and the log as well.
 
 ## For administrators
 
