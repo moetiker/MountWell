@@ -113,7 +113,12 @@ struct ShareCard: View {
             .glassButton()
             .buttonBorderShape(.circle)
             .controlSize(.large)
+            // faded until the mouse is over the card; the README pictures show them in full
+            #if SCREENSHOT
+            .opacity(1)
+            #else
             .opacity(hovering ? 1 : 0.55)
+            #endif
         }
         .padding(14)
         .frame(maxWidth: .infinity)
@@ -257,8 +262,14 @@ struct StatusBar: View {
                     .glassButton(prominent: true)
                     .disabled(updater.busy)
             }
+            #if SCREENSHOT
+            // the pictures in the README would show a stale version after every release
+            Text(verbatim: "Created by Manuel Oetiker")
+                .foregroundStyle(.secondary)
+            #else
             Text(verbatim: "Version \(appVersion) · Created by Manuel Oetiker")
                 .foregroundStyle(.secondary)
+            #endif
         }
         .font(.caption)
         .padding(.horizontal, 14)
