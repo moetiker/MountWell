@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for mountwell.sh. nc, mount, osascript, diskutil, umount and ifconfig
+# Tests for mountwell.sh. nc, mount, smb-mount, osascript, diskutil, umount and ifconfig
 # are replaced by stubs, so the tests need neither a network nor real mounts.
 set -u
 cd "$(dirname "$0")/.."
@@ -26,14 +26,16 @@ cat > "$T/bin/mount" <<'S'
 #!/bin/bash
 cat "$STUB/mounts" 2>/dev/null
 S
-# records "osascript mount <url>": the URL must arrive as an argument, not in the script
+# records "smb-mount <url>"; exits with the status in $STUB/mountrc (default 0)
+cat > "$T/bin/smb-mount" <<'S'
+#!/bin/bash
+echo "smb-mount $*" >> "$STUB/calls"
+exit "$(cat "$STUB/mountrc" 2>/dev/null || echo 0)"
+S
+# the script must not mount through AppleScript any more: it showed dialogs
 cat > "$T/bin/osascript" <<'S'
 #!/bin/bash
-if [ "$*" = "-e on run argv -e mount volume (item 1 of argv) -e end run ${@: -1}" ]; then
-    echo "osascript mount ${@: -1}" >> "$STUB/calls"
-else
-    echo "osascript $*" >> "$STUB/calls"
-fi
+echo "osascript $*" >> "$STUB/calls"
 S
 cat > "$T/bin/diskutil" <<'S'
 #!/bin/bash
@@ -98,7 +100,7 @@ fail=0
 
 # setup <conf> <reachable hosts> <mount lines>
 setup() {
-    rm -rf "$T/home" "$T/calls" "$T/reachable" "$T/mounts" "$T/flaky" "$T/busy" "$T/dns" "$T/keychain" "$T/ids"
+    rm -rf "$T/home" "$T/calls" "$T/mountrc" "$T/reachable" "$T/mounts" "$T/flaky" "$T/busy" "$T/dns" "$T/keychain" "$T/ids"
     mkdir -p "$C"
     printf '%b' "$1" > "$C/shares.conf"
     printf '%b' "$2" > "$T/reachable"
@@ -110,7 +112,7 @@ setup() {
 # "nothing happens" test passes when the script dies early.
 runit() {
     local rc=0
-    HOME="$T/home" STUB="$T" MOUNTWELL_RETRY_DELAY=0 MOUNTWELL_SMBID="$T/bin/smb-id" PATH="$T/bin:$PATH" \
+    HOME="$T/home" STUB="$T" MOUNTWELL_RETRY_DELAY=0 MOUNTWELL_SMBID="$T/bin/smb-id" MOUNTWELL_SMBMOUNT="$T/bin/smb-mount" PATH="$T/bin:$PATH" \
         bash "$SCRIPT" --now >/dev/null 2>"$T/stderr" || rc=$?
     if [ "$rc" != 0 ] || grep -qE 'unbound variable|syntax error|command not found|No such file' "$T/stderr"; then
         fail=$((fail + 1))
@@ -141,13 +143,31 @@ M='//anna@fileserver.example.com/team on /Volumes/team (smbfs, nodev, nosuid, mo
 
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 runit
-expect "reachable, not mounted → mount" 'osascript mount smb://fileserver.example.com/team'
+expect "reachable, not mounted → mount" 'smb-mount smb://fileserver.example.com/team'
 grep -q 'mounting smb://fileserver.example.com/team' "$T/home/Library/Logs/mountwell.log" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: log entry missing"; }
+expect "mounted without AppleScript (no dialog)" 'osascript' nogrep
+
+# smb-mount exits 3 when the keychain has no password: say so once, not every minute
+setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
+echo 3 > "$T/mountrc"
+runit
+runit
+LOGF="$T/home/Library/Logs/mountwell.log"
+[ "$(grep -cF 'not mounting smb://fileserver.example.com/team: no password for fileserver.example.com in the keychain' "$LOGF")" = 1 ] \
+    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: missing password not logged exactly once"; cat "$LOGF"; }
+grep -qE ':[0-9]{2} mounting smb|mount failed' "$LOGF" \
+    && { fail=$((fail + 1)); echo "FAIL: missing password logged as mounting or failure"; } || pass=$((pass + 1))
+
+setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
+echo 1 > "$T/mountrc"
+runit
+grep -qF 'mount failed: smb://fileserver.example.com/team' "$T/home/Library/Logs/mountwell.log" \
+    && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: failed mount not logged"; }
 
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' "$M"
 runit
-expect "reachable, mounted → do nothing" 'osascript|diskutil' nogrep
+expect "reachable, mounted → do nothing" 'smb-mount|osascript|diskutil' nogrep
 
 setup 'smb://fileserver.example.com/team\n' '' "$M"
 runit
@@ -162,11 +182,11 @@ expect "short dropout (2 failed attempts) → do not unmount" 'diskutil' nogrep
 
 setup 'smb://fileserver.example.com/team\n' '' ''
 runit
-expect "unreachable, not mounted → do nothing" 'osascript|diskutil' nogrep
+expect "unreachable, not mounted → do nothing" 'smb-mount|osascript|diskutil' nogrep
 
 setup 'smb://FileServer.Example.com/Team\n' 'FileServer.Example.com\n' "$M"
 runit
-expect "comparison ignores case" 'osascript|diskutil' nogrep
+expect "comparison ignores case" 'smb-mount|osascript|diskutil' nogrep
 
 setup 'smb://fileserver.example.com/team 192.168.1.\n' 'fileserver.example.com\n' "$M"
 runit
@@ -190,15 +210,15 @@ expect "wrong network, not mounted → do not even check the server" '^nc ' nogr
 
 setup 'smb://fileserver.example.com/team 192.168.1.,10.46.\n' 'fileserver.example.com\n' ''
 runit
-expect "matching network (second prefix) → mount" 'osascript mount '
+expect "matching network (second prefix) → mount" 'smb-mount '
 
 setup 'smb://fileserver.example.com/team # Team Drive\n' 'fileserver.example.com\n' ''
 runit
-expect "alias without networks → mount" 'osascript mount smb://fileserver.example.com/team'
+expect "alias without networks → mount" 'smb-mount smb://fileserver.example.com/team'
 
 setup 'smb://fileserver.example.com/team 10.46. # Team Drive\n' 'fileserver.example.com\n' ''
 runit
-expect "alias after networks → mount" 'osascript mount smb://fileserver.example.com/team'
+expect "alias after networks → mount" 'smb-mount smb://fileserver.example.com/team'
 
 setup 'smb://fileserver.example.com/team 192.168.1. # Team Drive\n' 'fileserver.example.com\n' "$M"
 runit
@@ -206,20 +226,20 @@ expect "alias after networks, wrong network → unmount" 'diskutil unmount /Volu
 
 setup '!smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 runit
-expect "disabled share, not mounted → do nothing" 'nc|osascript|diskutil' nogrep
+expect "disabled share, not mounted → do nothing" 'nc|smb-mount|osascript|diskutil' nogrep
 
 setup '! smb://fileserver.example.com/team 192.168.1. # Team\n' '' "$M"
 runit
-expect "disabled share, mounted, wrong network, unreachable → leave it" 'nc|osascript|diskutil|umount' nogrep
+expect "disabled share, mounted, wrong network, unreachable → leave it" 'nc|smb-mount|osascript|diskutil|umount' nogrep
 
 setup '!smb://a.example/x\nsmb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 runit
-expect "disabled share does not stop the others" 'osascript mount smb://fileserver.example.com/team'
+expect "disabled share does not stop the others" 'smb-mount smb://fileserver.example.com/team'
 
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 touch "$C/disabled"
 runit
-expect "disabled → do nothing" 'nc|osascript|diskutil' nogrep
+expect "disabled → do nothing" 'nc|smb-mount|osascript|diskutil' nogrep
 
 # remembered servers: DNS fallback and servers configured by IP
 A="$C/servers.yaml"
@@ -267,7 +287,7 @@ echo "fileserver.example.com 10.46.1.20" > "$T/dns"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
 check "name resolves → address, network, router and server ID remembered" "$A" "$ENTRY"
-expect "name resolves → mounted by name" 'osascript mount smb://anna@fileserver.example.com/team'
+expect "name resolves → mounted by name" 'smb-mount smb://anna@fileserver.example.com/team'
 
 setup 'smb://anna@fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 echo "fileserver.example.com 10.46.1.20" > "$T/dns"
@@ -283,20 +303,20 @@ check "server does not answer with an ID → entry kept as it was" "$A" "$ENTRY"
 
 fallback '10.46.1.20\n' ''
 runit
-expect "name does not resolve, same network, router and server → mount via IP" 'osascript mount smb://anna@10.46.1.20/team'
+expect "name does not resolve, same network, router and server → mount via IP" 'smb-mount smb://anna@10.46.1.20/team'
 
 fallback '10.46.1.20\n' ''
 STUB_IP=192.168.1.23 runit
-expect "other network → remembered IP not contacted" 'nc 10.46.1.20|osascript' nogrep
+expect "other network → remembered IP not contacted" 'nc 10.46.1.20|smb-mount|osascript' nogrep
 
 fallback '10.46.1.20\n' ''
 STUB_MAC=aa:bb:cc:0:99:99 runit
-expect "same range, other router → remembered IP not contacted" 'nc 10.46.1.20|osascript' nogrep
+expect "same range, other router → remembered IP not contacted" 'nc 10.46.1.20|smb-mount|osascript' nogrep
 
 fallback '10.46.1.20\n' ''
 echo "10.46.1.20 ffff0000" > "$T/ids"
 runit
-expect "same network, other server at the IP → not mounted" 'osascript' nogrep
+expect "same network, other server at the IP → not mounted" 'smb-mount|osascript' nogrep
 grep -qF "not mounting smb://anna@fileserver.example.com/team: the server at 10.46.1.20 is not the one seen before" "$LOGF" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: other server → logged"; }
 runit
@@ -305,11 +325,11 @@ if [ "$(grep -c 'not the one seen before' "$LOGF")" = 1 ]; then pass=$((pass + 1
 fallback '10.46.1.20\n' ''
 rm "$T/keychain"
 runit
-expect "no keychain password for the IP → no fallback, no password dialog" 'nc 10.46.1.20|osascript' nogrep
+expect "no keychain password for the IP → no fallback, no password dialog" 'nc 10.46.1.20|smb-mount|osascript' nogrep
 
 fallback '10.46.1.20\n' "$MIP"
 runit
-expect "mounted via IP, IP answers → stays mounted" 'diskutil|umount|osascript' nogrep
+expect "mounted via IP, IP answers → stays mounted" 'diskutil|umount|smb-mount|osascript' nogrep
 
 fallback '' "$MIP"
 runit
@@ -318,14 +338,14 @@ expect "mounted via IP, IP gone → unmounted" 'diskutil unmount force /Volumes/
 fallback '10.46.1.20\n' ''
 echo "fileserver.example.com/team" > "$C/ejected"
 runit
-expect "ejected share is not mounted via IP either" 'osascript' nogrep
+expect "ejected share is not mounted via IP either" 'smb-mount|osascript' nogrep
 
 # switched off: remembered while mounted by hand, never mounted or unmounted
 setup '!smb://manuel@10.46.1.20/data # Data\n' '10.46.1.20\n' '//manuel@10.46.1.20/data on /Volumes/data (smbfs, nodev, nosuid, mounted by anna)\n'
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
 check "switched off, configured by IP, mounted by hand → server remembered" "$A" "10.46.1.20 10.46.1.20 $NET 0123abcd"
-expect "switched off, mounted by hand → left alone" 'osascript|diskutil|umount' nogrep
+expect "switched off, mounted by hand → left alone" 'smb-mount|osascript|diskutil|umount' nogrep
 
 setup '! smb://anna@fileserver.example.com/team\n' 'fileserver.example.com\n' "$M"
 echo "fileserver.example.com 10.46.1.20" > "$T/dns"
@@ -338,7 +358,7 @@ echo "fileserver.example.com 10.46.1.20" > "$T/dns"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
 check "switched off, not mounted → nothing remembered" "$A" "$ENTRY" absent
-expect "switched off, not mounted → server not contacted" 'nc|osascript' nogrep
+expect "switched off, not mounted → server not contacted" 'nc|smb-mount|osascript' nogrep
 
 # mounted by name, DNS drops out: checked via the remembered IP, not force-unmounted
 setup 'smb://anna@fileserver.example.com/team\n' '10.46.1.20\n' "$M"
@@ -363,7 +383,7 @@ if [ -s "$A" ] && table "$A" | grep -q .; then fail=$((fail + 1)); echo "FAIL: r
 
 fallback '10.46.1.20\n' ''
 STUB_MAC=none runit
-expect "router MAC unknown → remembered IP not used" 'osascript' nogrep
+expect "router MAC unknown → remembered IP not used" 'smb-mount|osascript' nogrep
 
 # YAML file
 setup 'smb://anna@fileserver.example.com/team\n' 'fileserver.example.com\n' ''
@@ -384,26 +404,26 @@ check "old addresses file → three-field line dropped" "$A" "old.example.com 10
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 sleep 30 & holder=$!
 shlock -f "$C/.run.lock" -p $holder
-HOME="$T/home" STUB="$T" MOUNTWELL_RETRY_DELAY=0 MOUNTWELL_LOCK_WAIT=0 MOUNTWELL_SMBID="$T/bin/smb-id" PATH="$T/bin:$PATH" bash "$SCRIPT" --now >/dev/null 2>&1
+HOME="$T/home" STUB="$T" MOUNTWELL_RETRY_DELAY=0 MOUNTWELL_LOCK_WAIT=0 MOUNTWELL_SMBID="$T/bin/smb-id" MOUNTWELL_SMBMOUNT="$T/bin/smb-mount" PATH="$T/bin:$PATH" bash "$SCRIPT" --now >/dev/null 2>&1
 kill $holder 2>/dev/null; wait $holder 2>/dev/null
-expect "another run holds the lock → nothing done" 'nc|osascript' nogrep
+expect "another run holds the lock → nothing done" 'nc|smb-mount|osascript' nogrep
 grep -qF "skipped: another run is still going" "$LOGF" && pass=$((pass + 1)) \
     || { fail=$((fail + 1)); echo "FAIL: another run holds the lock → skip logged"; }
 runit
-expect "lock of a finished run → taken over" 'osascript mount '
+expect "lock of a finished run → taken over" 'smb-mount '
 
 # review fixes
 setup 'smb://fileserver.example.com/x"&(do_shell_script)&"\n' 'fileserver.example.com\n' ''
 runit
-expect "quote in the URL → passed to osascript as an argument, unchanged" 'osascript mount smb://fileserver.example.com/x"&(do_shell_script)&"'
+expect "quote in the URL → passed to smb-mount as an argument, unchanged" 'smb-mount smb://fileserver.example.com/x"&(do_shell_script)&"'
 
 setup 'smb://fileserver.example.com/team 10.99.,,192.168.77.\n' 'fileserver.example.com\n' ''
 runit
-expect "empty entry in the network list → does not match every network" 'osascript' nogrep
+expect "empty entry in the network list → does not match every network" 'smb-mount|osascript' nogrep
 
 setup 'smb://fileserver.example.com/team ,\n' 'fileserver.example.com\n' ''
 runit
-expect "network list of only commas → no limit, as the app shows it" 'osascript mount smb://fileserver.example.com/team'
+expect "network list of only commas → no limit, as the app shows it" 'smb-mount smb://fileserver.example.com/team'
 
 setup 'smb://fileserver.example.com/Data%20on%20NAS\n' '' '//anna@fileserver.example.com/Data%20on%20NAS on /Volumes/Data on NAS (smbfs, nodev, nosuid, mounted by anna)\n'
 runit
@@ -414,7 +434,7 @@ servers "nas.example.com 10.46.1.20 $NET 0123abcd" > "$A"
 echo 10.46.1.20 > "$T/keychain"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
-expect "user name equal to the server name → only the server replaced" 'osascript mount smb://nas@10.46.1.20/team'
+expect "user name equal to the server name → only the server replaced" 'smb-mount smb://nas@10.46.1.20/team'
 
 setup 'smb://anna@fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 echo "fileserver.example.com 192.168.1.30" > "$T/dns"
@@ -429,13 +449,13 @@ servers "fileserver.example.com 192.168.1.30 192.168.1. aa:bb:cc:0:77:77 9999000
 echo 10.46.1.20 > "$T/keychain"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
-expect "two networks remembered → fallback uses the entry of the current one" 'osascript mount smb://anna@10.46.1.20/team'
+expect "two networks remembered → fallback uses the entry of the current one" 'smb-mount smb://anna@10.46.1.20/team'
 
 setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' ''
 servers "10.46.1.20 10.46.1.20 192.168.1. aa:bb:cc:0:77:77 0123abcd" > "$A"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
-expect "configured by IP, only seen in another network → not mounted" 'osascript' nogrep
+expect "configured by IP, only seen in another network → not mounted" 'smb-mount|osascript' nogrep
 grep -qF "not mounting smb://10.46.1.20/team: 10.46.1.20 is in a different network than before" "$LOGF" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: other network → logged"; }
 
@@ -448,13 +468,13 @@ check "configured by IP, mounted in a new network → first network kept" "$A" "
 
 setup 'smb://a.example/x\nsmb://b.example/y' 'a.example\nb.example\n' ''
 runit
-expect "last line without a newline → still read" 'osascript mount smb://b.example/y'
+expect "last line without a newline → still read" 'smb-mount smb://b.example/y'
 
 # configured by IP
 IPENTRY="10.46.1.20 10.46.1.20 $NET 0123abcd"
 setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' ''
 runit
-expect "configured by IP, nothing remembered → mounted as before" 'osascript mount smb://10.46.1.20/team'
+expect "configured by IP, nothing remembered → mounted as before" 'smb-mount smb://10.46.1.20/team'
 
 setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' "$MIP"
 echo "10.46.1.20 0123abcd" > "$T/ids"
@@ -465,19 +485,19 @@ setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' ''
 servers "$IPENTRY" > "$A"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 runit
-expect "configured by IP, same network and server → mounted" 'osascript mount smb://10.46.1.20/team'
+expect "configured by IP, same network and server → mounted" 'smb-mount smb://10.46.1.20/team'
 
 setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' ''
 servers "$IPENTRY" > "$A"
 echo "10.46.1.20 0123abcd" > "$T/ids"
 STUB_MAC=aa:bb:cc:0:99:99 runit
-expect "configured by IP, other router with the same range → not mounted" 'osascript' nogrep
+expect "configured by IP, other router with the same range → not mounted" 'smb-mount|osascript' nogrep
 
 setup 'smb://10.46.1.20/team\n' '10.46.1.20\n' ''
 servers "$IPENTRY" > "$A"
 echo "10.46.1.20 ffff0000" > "$T/ids"
 runit
-expect "configured by IP, other server at the IP → not mounted" 'osascript' nogrep
+expect "configured by IP, other server at the IP → not mounted" 'smb-mount|osascript' nogrep
 
 setup '' 'fileserver.example.com\n' ''
 rm "$C/shares.conf"
@@ -486,36 +506,36 @@ runit && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: exit code ≠ 0
 setup '# comment\n\n   \nsmb://a.example/x\n# smb://b.example/y\n' 'a.example\nb.example\n' ''
 runit
 expect "comments and blank lines are ignored" 'b.example' nogrep
-expect "entry after comments is processed" 'osascript mount smb://a.example/x'
+expect "entry after comments is processed" 'smb-mount smb://a.example/x'
 
 setup 'smb://a.example/x\nsmb://b.example/y\n' 'b.example\n' \
     '//u@a.example/x on /Volumes/x (smbfs)\n'
 runit
 expect "several shares: unmount a" 'diskutil unmount force /Volumes/x'
-expect "several shares: mount b" 'osascript mount smb://b.example/y'
+expect "several shares: mount b" 'smb-mount smb://b.example/y'
 
 setup 'smb://srv.example/share\n' 'srv.example\n' \
     '//u@srv.example/share-old on /Volumes/share-old (smbfs)\n'
 runit
-expect "similar name does not count as mounted" 'osascript mount smb://srv.example/share'
+expect "similar name does not count as mounted" 'smb-mount smb://srv.example/share'
 
 setup 'smb://example.com/team\n' 'example.com\n' "$M"
 runit
-expect "host suffix does not count as mounted" 'osascript mount smb://example.com/team'
+expect "host suffix does not count as mounted" 'smb-mount smb://example.com/team'
 
 # ejected by hand in the app
 E="$C/ejected"
 setup 'smb://fileserver.example.com/team\n' 'fileserver.example.com\n' ''
 echo "FileServer.Example.com/team" > "$E"
 runit
-expect "ejected, reachable → do not mount again" 'osascript' nogrep
+expect "ejected, reachable → do not mount again" 'smb-mount|osascript' nogrep
 grep -qix "fileserver.example.com/team" "$E" && pass=$((pass + 1)) \
     || { fail=$((fail + 1)); echo "FAIL: eject entry lost while server reachable"; }
 
 setup 'smb://fileserver.example.com/team\nsmb://fileserver.example.com/other\n' 'fileserver.example.com\n' ''
 printf 'fileserver.example.com/team\n' > "$E"
 runit
-expect "ejected share does not block other shares" 'osascript mount smb://fileserver.example.com/other'
+expect "ejected share does not block other shares" 'smb-mount smb://fileserver.example.com/other'
 
 setup 'smb://fileserver.example.com/team\n' '' ''
 echo "fileserver.example.com/team" > "$E"
@@ -534,7 +554,7 @@ echo "fileserver.example.com/team" > "$E"
 runit
 grep -qi "fileserver.example.com/team" "$E" && { fail=$((fail + 1)); echo "FAIL: eject not forgotten after mounting again"; } \
     || pass=$((pass + 1))
-expect "mounted again by hand → leave it mounted" 'diskutil|osascript' nogrep
+expect "mounted again by hand → leave it mounted" 'diskutil|smb-mount|osascript' nogrep
 
 # predecessor SMB Automount: configuration and log are taken over
 setup '' 'fileserver.example.com\n' ''
@@ -543,7 +563,7 @@ mkdir -p "$T/home/.config/smb-automount" "$T/home/Library/Logs"
 printf 'smb://fileserver.example.com/team\n' > "$T/home/.config/smb-automount/shares.conf"
 echo "old entry" > "$T/home/Library/Logs/smb-automount.log"
 runit
-expect "old configuration taken over → mount" 'osascript mount smb://fileserver.example.com/team'
+expect "old configuration taken over → mount" 'smb-mount smb://fileserver.example.com/team'
 [ -e "$C/shares.conf" ] && [ ! -e "$T/home/.config/smb-automount" ] \
     && grep -q "old entry" "$T/home/Library/Logs/mountwell.log" \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: configuration/log not taken over"; }
@@ -560,7 +580,7 @@ rm -rf "$T/home/Library/Application Support"
 mkdir -p "$T/home/.config/mountwell"
 printf 'smb://fileserver.example.com/team\n' > "$T/home/.config/mountwell/shares.conf"
 runit
-expect "configuration in ~/.config taken over → mount" 'osascript mount smb://fileserver.example.com/team'
+expect "configuration in ~/.config taken over → mount" 'smb-mount smb://fileserver.example.com/team'
 [ -e "$C/shares.conf" ] && [ ! -e "$T/home/.config/mountwell" ] \
     && pass=$((pass + 1)) || { fail=$((fail + 1)); echo "FAIL: ~/.config/mountwell not moved"; }
 

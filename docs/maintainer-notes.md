@@ -80,8 +80,17 @@ still applies.
 - Reachable means `nc -z -G 2 <host> 445`. `-G` does not bound a hanging DNS lookup.
 - `mount` prints `//user@host/share on …` even without a user. The match requires `@` or
   `/` before and ` on ` after `server/share` (M-7).
-- `osascript … mount volume` is used because it takes the password from the keychain. It
-  must have been saved once in Finder, or every run shows a dialog.
+- The script mounts with `smb-mount` (`app/smb-mount`): `NetFSMountURLSync` with
+  `kNAUIOptionNoUI`, which takes the password from the keychain. Until 0.4.1 it used
+  `osascript … mount volume`. Without a keychain password that showed "You are attempting
+  to connect to the server" and then the login dialog, and waited for a click; launchd
+  starts no run while one is running, so meanwhile no share was mounted or unmounted.
+  After Cancel the next run showed it again. Seen in a test VM with 0.4.1.
+- A server counts as known (`isKnownServer 1` in the NetAuth log) once its password was
+  saved through the macOS login dialog. A password added with `security
+  add-internet-password` was not used, and the server stayed unknown.
+- `smb-mount` exits 3 for `EAUTH`, `EACCES` and `ENETFSNOAUTHMECHSUPP`; the script logs
+  that through `note`, so it appears once and not every minute.
 - `diskutil unmount force`, then `umount -f`: a plain unmount fails once the server is
   gone and Finder hangs.
 - A forced unmount discards open files, hence three tries 5 s apart (`TRIES`,
@@ -132,10 +141,10 @@ still applies.
   anything running as the user could swap it in between and get the administrator
   password typed for its own package. The app runs `install-update` only from
   `/Applications/MountWell.app` and only if root owns it.
-- `smb-id` lives in `Contents/MacOS`, not `Resources`, so `codesign` treats it as nested
+- `smb-id` and `smb-mount` live in `Contents/MacOS`, not `Resources`, so `codesign` treats it as nested
   code; notarization needs it signed with the hardened runtime before the bundle.
 - The keychain entry belongs to the string in the URL. Mounting `smb://<ip>/share` without
-  an entry for `<ip>` makes `mount volume` ask for a password, every minute while DNS is
+  an entry for `<ip>` made `mount volume` ask for a password, every minute while DNS is
   down. Hence the `security find-internet-password -s <ip> -r "smb "` check; without `-w`
   it reads only attributes and does not prompt. Kerberos needs the name and does not work
   via the address.

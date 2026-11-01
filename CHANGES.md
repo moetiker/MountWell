@@ -17,6 +17,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 ### Fixed
+- Without a saved password, mounting a share showed "You are attempting to connect to the server" and a login dialog from the background, every minute after Cancel. While the dialog was open MountWell mounted and unmounted nothing else. The share is now skipped and the log says "no password … in the keychain"; save the password once with the link button.
 - After `brew uninstall --cask mountwell` or `uninstall.sh`, MountWell kept running in the menu bar. Both now quit it.
 
 ## 0.4.1 - 2026-10-30

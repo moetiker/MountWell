@@ -33,6 +33,8 @@ EJECTED="$CONFDIR/ejected"
 SERVERS="$CONFDIR/servers.yaml"
 # prints the SMB server ID of a host (app/smb-id); next to the app binary
 SMBID="${MOUNTWELL_SMBID:-$(dirname "$0")/../MacOS/smb-id}"
+# mounts a share without any dialog (app/smb-mount); next to the app binary
+SMBMOUNT="${MOUNTWELL_SMBMOUNT:-$(dirname "$0")/../MacOS/smb-mount}"
 
 log() {
     local line
@@ -372,15 +374,21 @@ while read -r url nets || [ -n "${url:-}" ]; do
                 # no credentials go to a different device at the same IP
                 note "not mounting $url: the server at $probe is not the one seen before"
             else
-                if [ "$target" = "$url" ]; then
-                    log "mounting $url"
-                else
-                    log "mounting $url via $probe ($host does not resolve)"
-                fi
-                # the URL as an argument, never inside the script text: a '"' in it would
-                # otherwise end the string and run what follows as AppleScript
-                osascript -e 'on run argv' -e 'mount volume (item 1 of argv)' -e 'end run' "$target" \
-                    >/dev/null 2>&1 || log "mount failed: $target"
+                # Never a dialog: a password dialog from "mount volume" waited for a click,
+                # and until then launchd started no run, so nothing else was mounted or
+                # unmounted. Without a keychain password the mount fails at once.
+                "$SMBMOUNT" "$target" </dev/null >/dev/null 2>&1
+                case $? in
+                0)
+                    if [ "$target" = "$url" ]; then
+                        log "mounting $url"
+                    else
+                        log "mounting $url via $probe ($host does not resolve)"
+                    fi
+                    ;;
+                3) note "not mounting $url: no password for $probe in the keychain" ;;
+                *) log "mount failed: $target" ;;
+                esac
             fi
         elif ! reachable "$TRIES"; then
             # server unreachable several times: a normal unmount would hang

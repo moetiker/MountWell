@@ -43,8 +43,8 @@ mkdir -p "$B/root/Applications" "$B/root/Library/LaunchAgents"
 BUNDLE="$B/root/Applications/$APP.app"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 
-# the app: every Swift file in app/ except the icon generator (a script); smb-id and the
-# agent are programs of their own in app/smb-id/ and app/agent/
+# the app: every Swift file in app/ except the icon generator (a script); smb-id, smb-mount
+# and the agent are programs of their own in app/smb-id/, app/smb-mount/ and app/agent/
 APP_SOURCES=$(ls app/*.swift | grep -v '/make-icon\.swift$')
 for arch in arm64 x86_64; do
     # shellcheck disable=SC2086
@@ -53,11 +53,15 @@ for arch in arm64 x86_64; do
     swiftc -sdk "$SDKROOT" -O -swift-version 5 -target "$arch-apple-macos14.0" \
         app/Core.swift app/smb-id/main.swift -o "$B/smb-id-$arch"
     swiftc -sdk "$SDKROOT" -O -swift-version 5 -target "$arch-apple-macos14.0" \
+        app/smb-mount/main.swift -o "$B/smb-mount-$arch"
+    swiftc -sdk "$SDKROOT" -O -swift-version 5 -target "$arch-apple-macos14.0" \
         app/agent/main.swift -o "$B/agent-$arch"
 done
 lipo -create -output "$BUNDLE/Contents/MacOS/$APP" "$B/app-arm64" "$B/app-x86_64"
 # server ID for mountwell.sh (M-13); in MacOS/ so codesign treats it as nested code
 lipo -create -output "$BUNDLE/Contents/MacOS/smb-id" "$B/smb-id-arm64" "$B/smb-id-x86_64"
+# mounts without a dialog for mountwell.sh (M-2); in MacOS/ for the same reason
+lipo -create -output "$BUNDLE/Contents/MacOS/smb-mount" "$B/smb-mount-arm64" "$B/smb-mount-x86_64"
 # what launchd starts for the LaunchAgent; runs Resources/mountwell (app/agent/main.swift)
 lipo -create -output "$BUNDLE/Contents/MacOS/mountwell-agent" "$B/agent-arm64" "$B/agent-x86_64"
 
@@ -74,6 +78,7 @@ if [ -n "$SIGN_APP" ]; then
     # hardened runtime and a secure timestamp are what notarization requires,
     # for the nested helpers as well; they are signed first, the bundle seals them
     codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$BUNDLE/Contents/MacOS/smb-id"
+    codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$BUNDLE/Contents/MacOS/smb-mount"
     codesign --force --options runtime --timestamp --sign "$SIGN_APP" \
         --identifier ch.oetiker.mountwell.agent "$BUNDLE/Contents/MacOS/mountwell-agent"
     codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$BUNDLE"

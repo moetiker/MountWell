@@ -37,6 +37,7 @@ SIGN_APP= SIGN_PKG= TEAM_ID= ./build.sh   # unsigned, as without certificates
   `MenuBar.swift`, `Glass.swift`: the views, one file per window or menu.
 - `app/Updater.swift`: update check and install (U-1 to U-4).
 - `app/smb-id/`: prints a server's SMB ServerGuid for the script (M-12).
+- `app/smb-mount/`: mounts a share for the script without any dialog (M-2).
 - `app/agent/`: `mountwell-agent`, the signed program the LaunchAgent starts; runs the
   script (I-6).
 - `app/install-update.sh`: checks and installs a signed update as root (U-4).
@@ -52,8 +53,9 @@ setting is a new file or line format, documented in the spec and the script head
 - Blocking work runs in `Task.detached`, never on the main actor.
 - External programs run through `run(_:_:)` in `Core.swift` with absolute paths.
 - Bash must work with bash 3.2 and `set -u`; quote every expansion.
-- The script calls `nc`, `mount`, `osascript`, `diskutil`, `umount` and `ifconfig`
-  without a path, so the tests can stub them.
+- The script calls `nc`, `mount`, `diskutil`, `umount` and `ifconfig` without a path, so
+  the tests can stub them; `smb-id` and `smb-mount` through `MOUNTWELL_SMBID` and
+  `MOUNTWELL_SMBMOUNT`.
 - Log lines use `mounting`, `unmounting` or `failed`; `LogPanel` picks icons from them.
 - Package scripts run as root: no predictable files in `/tmp`, use `/var/run`.
 

@@ -70,7 +70,7 @@ the build and notarization with `--local`.
 ## Limits
 
 - No share is mounted. Tart's VMs cannot reach each other, and macOS does not mount
-  its own shares through the system's mount service (error 65), which is what
-  `mount volume` uses. A packet filter redirect gets past both, but the mount then
-  waits for a confirmation dialog nothing can click.
+  its own shares through the system's mount service (error 65), which `smb-mount`
+  uses. A packet filter redirect gets past both, but a mount needs a password saved
+  once through the macOS login dialog, which nothing can click while SIP is on.
 - An update from the previous version is not tested.
