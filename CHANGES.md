@@ -12,9 +12,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
-- `tools/test-vm` tests MountWell unattended in a throwaway macOS VM: install with Homebrew or from a local package, Gatekeeper, the background service and its Login Items entry, and the uninstall. The VM is deleted after the test.
 
 ### Changed
+
+### Fixed
+
+## 0.4.2 - 2026-11-01
+### New
+- `tools/test-vm` tests MountWell unattended in a throwaway macOS VM: install with Homebrew or from a local package, Gatekeeper, the background service and its Login Items entry, and the uninstall. The VM is deleted after the test.
 
 ### Fixed
 - Without a saved password, mounting a share showed "You are attempting to connect to the server" and a login dialog from the background, every minute after Cancel. While the dialog was open MountWell mounted and unmounted nothing else. The share is now skipped and the log says "no password … in the keychain"; save the password once with the link button.
