@@ -14,7 +14,8 @@ cask "mountwell" do
 
   pkg "MountWell-#{version}.pkg"
 
-  uninstall launchctl: "ch.oetiker.mountwell",
+  uninstall quit:      "ch.oetiker.mountwell.app",
+            launchctl: "ch.oetiker.mountwell",
             pkgutil:   "ch.oetiker.mountwell",
             delete:    [
               "/Applications/MountWell.app",

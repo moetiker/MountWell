@@ -11,6 +11,8 @@ main() {
     for uid in $(ps -axo uid=,comm= | awk '/loginwindow$/{print $1}' | sort -u); do
         launchctl bootout "gui/$uid/$LABEL" 2>/dev/null
     done
+    # the app keeps no state of its own; without this it stayed in the menu bar
+    pkill -x MountWell
     rm -f "/Library/LaunchAgents/$LABEL.plist"
     rm -rf "/Applications/MountWell.app"
     pkgutil --forget "$LABEL" >/dev/null 2>&1
