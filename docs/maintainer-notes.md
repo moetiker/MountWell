@@ -209,6 +209,14 @@ still applies.
 - `HOME` is a temporary directory.
 - Counter-check: replace `diskutil unmount force` by `true` (`MOUNTWELL_SCRIPT=…`) and the
   forced-unmount tests fail.
+- `tools/test-vm` mounts nothing. Two Tart VMs on the default network do not reach each
+  other ("Host is down"). In one VM, `mount_smbfs` reaches its own SMB server, but
+  `mount volume` goes through NetAuthSysAgent, which fails with error 65 for the Mac's own
+  addresses. A pf redirect from 10.66.0.1 to 127.0.0.1:445 got past that, then the mount
+  waited on "You are attempting to connect to the server". Forwarding port 445 on the Mac
+  needs root.
+- `sfltool dumpbtm` lists the app with `Developer Name: (null)` too; check.sh reads only
+  the block of the LaunchAgent plist.
 
 ## Open
 

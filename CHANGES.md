@@ -12,10 +12,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### New
+- `tools/test-vm` tests MountWell unattended in a throwaway macOS VM: install with Homebrew or from a local package, Gatekeeper, the background service and its Login Items entry, and the uninstall. The VM is deleted after the test.
 
 ### Changed
 
 ### Fixed
+- After `brew uninstall --cask mountwell` or `uninstall.sh`, MountWell kept running in the menu bar. Both now quit it.
 
 ## 0.4.1 - 2026-10-30
 ### Changed

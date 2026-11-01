@@ -76,6 +76,7 @@ setting is a new file or line format, documented in the spec and the script head
   and log to `calls`.
 - Every change to `Core.swift` or the script comes with a test that fails without it.
 - Real server, optional: `MOUNTWELL_TEST_SERVER=<name> tests/run.sh`.
+- Clean Mac, optional: `tools/test-vm run [--local]`, see [testing.md](testing.md).
 - The UI is tested by hand; say what you checked in the pull request.
 
 ## Workflow and releases
