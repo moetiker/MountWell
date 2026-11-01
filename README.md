@@ -131,6 +131,10 @@ notarized by Apple; the app installs only updates signed by the same developer.
 tools/screenshot.sh    # the pictures in docs/, from the real views
 ```
 
+`tools/test-vm` installs MountWell unattended in a throwaway macOS VM and checks the
+installer, the background service, Gatekeeper and the uninstall. It needs
+[Tart](https://tart.run); [docs/testing.md](docs/testing.md) describes setup and a run.
+
 - [`docs/spec.md`](docs/spec.md): what MountWell must do
 - [`docs/programming-guide.md`](docs/programming-guide.md): architecture, conventions, translation, tests, releases
 - [`docs/maintainer-notes.md`](docs/maintainer-notes.md): pitfalls and the reasons behind decisions

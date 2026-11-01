@@ -1,0 +1,178 @@
+#!/bin/bash
+# Tests MountWell in a clean macOS VM (Tart), unattended. On a Mac that has run
+# earlier versions, their settings, login item entries and receipts hide what a new
+# user sees.
+#
+#   tools/test-vm setup          build the clean image once (about an hour)
+#   tools/test-vm run [--local] [--show]
+#                                test in a throwaway copy, deleted afterwards
+#   tools/test-vm clean          delete copies a killed run left behind
+#
+# setup installs the current macOS from Apple's IPSW, lets Tart's provisioning
+# create the user admin/admin with SSH and automatic login, and installs Homebrew.
+#
+# run installs the released cask, or with --local the package from ./build.sh, and
+# runs tests/vm/check.sh in the copy. --show opens the VM window. The exit code is
+# the number of failed checks. MOUNTWELL_VM names the clean image (default
+# mountwell-clean), which is never started after setup.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+CLEAN=${MOUNTWELL_VM:-mountwell-clean}
+BUILDING=$CLEAN-building
+PREFIX=mountwell-test-
+KEY=$HOME/.ssh/mountwell-test-vm
+LOGDIR=build/test-vm
+
+command -v tart >/dev/null || { echo "tart is missing, see docs/testing.md" >&2; exit 1; }
+
+exists() { tart list --source local --quiet | grep -qx "$1"; }
+state() { tart list --source local --format json | python3 -I -c \
+    'import json,sys; print(next((v["State"] for v in json.load(sys.stdin) if v["Name"]==sys.argv[1]), ""))' "$1"; }
+
+# The key logs in once setup has installed it; before that the password does,
+# fed by SSH_ASKPASS since ssh reads a password only from a terminal.
+ASKPASS=$LOGDIR/askpass
+# ./build.sh deletes build/, so run calls this again after the build
+init_logdir() {
+    mkdir -p "$LOGDIR"
+    printf '#!/bin/sh\necho admin\n' > "$ASKPASS" && chmod +x "$ASKPASS"
+}
+init_logdir
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+          -o ConnectTimeout=5 -i "$KEY")
+vm_ssh() { local vm=$1; shift
+    SSH_ASKPASS=$ASKPASS SSH_ASKPASS_REQUIRE=force ssh "${SSH_OPTS[@]}" "admin@$(tart ip "$vm")" "$@"; }
+vm_scp() { local vm=$1 dest=$2; shift 2
+    SSH_ASKPASS=$ASKPASS SSH_ASKPASS_REQUIRE=force scp -q "${SSH_OPTS[@]}" "$@" "admin@$(tart ip "$vm"):$dest"; }
+
+boot() { # <vm> [tart run options]: starts the VM and waits until SSH answers
+    local vm=$1; shift
+    tart run "$@" "$vm" >"$LOGDIR/$vm.log" 2>&1 &
+    tart ip "$vm" --wait 600 >/dev/null
+    for _ in $(seq 120); do
+        vm_ssh "$vm" true </dev/null 2>/dev/null && return 0
+        sleep 5
+    done
+    echo "$vm: no SSH after 10 minutes, see $LOGDIR/$vm.log" >&2
+    return 1
+}
+
+halt() { # <vm>: shuts the VM down and waits until Tart sees it stopped
+    vm_ssh "$1" 'sudo shutdown -h now' </dev/null >/dev/null 2>&1 || true
+    for _ in $(seq 60); do [ "$(state "$1")" = stopped ] && return 0; sleep 2; done
+    tart stop "$1"
+}
+
+setup() {
+    exists "$CLEAN" && { echo "$CLEAN exists already; delete it with: tart delete $CLEAN" >&2; exit 1; }
+    [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C mountwell-test-vm -f "$KEY"
+
+    # Tart keeps no copy of the 17 GB IPSW, so a setup that fails later resumes
+    # from the last finished step instead of installing macOS again.
+    local stagefile=$LOGDIR/$BUILDING.stage stage=
+    exists "$BUILDING" && stage=$(cat "$stagefile" 2>/dev/null || true)
+    [ -n "$stage" ] && echo "== resuming $BUILDING after: $stage"
+
+    if [ -z "$stage" ]; then
+        if exists "$BUILDING"; then tart delete "$BUILDING"; fi
+        echo "== installing macOS from the IPSW"
+        tart create --from-ipsw latest --disk-size 60 "$BUILDING"
+        stage=created; echo $stage > "$stagefile"
+    fi
+
+    if [ "$stage" = created ]; then
+        # Tart's provisioning applies on the first boot only
+        echo "== first boot: user admin, SSH, automatic login"
+        boot "$BUILDING" --no-graphics \
+            "--provisioning-opts=fullName=MountWell Test,username=admin,password=admin,logsInAutomatically=true,enablesRemoteLogin=true"
+        stage=booted; echo $stage > "$stagefile"
+    else
+        boot "$BUILDING" --no-graphics
+    fi
+    provision
+    halt "$BUILDING"
+
+    tart rename "$BUILDING" "$CLEAN"
+    rm -f "$stagefile"
+    echo "== $CLEAN is ready: tools/test-vm run"
+}
+
+provision() {
+    echo "== provisioning"
+    vm_ssh "$BUILDING" "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys" < "$KEY.pub"
+    vm_ssh "$BUILDING" 'bash -s' <<'EOF'
+set -e
+echo admin | sudo -S sh -c "mkdir -p /etc/sudoers.d && echo 'admin ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/admin && chmod 440 /etc/sudoers.d/admin"
+# The installer opens the app in the logged-in session, which needs an awake screen
+sudo systemsetup -setsleep Off >/dev/null 2>&1 || true
+sudo pmset -a displaysleep 0 sleep 0
+defaults -currentHost write com.apple.screensaver idleTime 0
+sysadminctl -screenLock off -password admin
+# Homebrew needs git from the Command Line Tools. Right after the first boot
+# softwareupdate lists no updates yet ("No new software available", and the
+# Homebrew installer gave up), so ask until the tools show up.
+touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+for try in $(seq 30); do
+    label=$(softwareupdate --list 2>&1 | sed -n 's/^\* Label: \(Command Line Tools.*\)$/\1/p' | tail -1)
+    [ -n "$label" ] && break
+    sleep 20
+done
+[ -n "$label" ] || { echo "no Command Line Tools offered by softwareupdate" >&2; exit 1; }
+sudo softwareupdate --install "$label" --agree-to-license
+rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+/opt/homebrew/bin/brew --version
+EOF
+}
+
+run() {
+    local local_build=0 show=0
+    for arg in "$@"; do
+        case $arg in
+        --local) local_build=1 ;;
+        --show) show=1 ;;
+        *) echo "unknown option $arg" >&2; exit 2 ;;
+        esac
+    done
+    exists "$CLEAN" || { echo "no $CLEAN yet; run: tools/test-vm setup" >&2; exit 1; }
+
+    local files=(tests/vm/check.sh) mode=(cask)
+    if [ $local_build = 1 ]; then
+        ./build.sh
+        init_logdir
+        local pkg
+        pkg=build/MountWell-$(cat VERSION).pkg
+        files+=("$pkg")
+        mode=(local "mountwell-test/$(basename "$pkg")")
+    fi
+
+    vm=$PREFIX$(date +%Y%m%d-%H%M%S)
+    # The copy goes on every exit: a finished test, Ctrl-C, or a failure on the way.
+    trap 'tart stop "$vm" >/dev/null 2>&1 || true; tart delete "$vm" && echo "deleted $vm"' EXIT
+    trap 'exit 130' INT TERM HUP
+    tart clone "$CLEAN" "$vm"
+    if [ $show = 1 ]; then boot "$vm"; else boot "$vm" --no-graphics; fi
+
+    vm_ssh "$vm" 'mkdir -p mountwell-test' </dev/null
+    vm_scp "$vm" mountwell-test/ "${files[@]}"
+    local rc=0
+    vm_ssh "$vm" "mountwell-test/check.sh ${mode[*]}" </dev/null 2>&1 | tee "$LOGDIR/$vm.check.log" || rc=$?
+    echo "log: $LOGDIR/$vm.check.log"
+    return "$rc"
+}
+
+case ${1:-} in
+setup) setup ;;
+run) shift; run "$@" ;;
+clean)
+    { tart list --source local --quiet | grep "^$PREFIX" || true; } | while read -r vm; do
+        tart stop "$vm" >/dev/null 2>&1 || true
+        tart delete "$vm" && echo "deleted $vm"
+    done
+    ;;
+*)
+    echo "usage: $0 setup | run [--local] [--show] | clean" >&2
+    exit 2
+    ;;
+esac
