@@ -16,7 +16,8 @@ configuration, the Mac App Store.
 - **M-1** A per-user service runs at login, on every network change and every 60 seconds,
   whether the app runs or not.
 - **M-2** A configured share whose server answers on TCP 445 is mounted with the keychain
-  password, without a dialog.
+  password, without a dialog. Without a keychain password it is not mounted, and the log
+  says so once.
 - **M-3** A mounted share whose server fails three checks 5 seconds apart is unmounted with
   force. One failed check does nothing.
 - **M-4** A share may be limited to IP prefixes. It is mounted only while one of the Mac's
@@ -50,8 +51,8 @@ configuration, the Mac App Store.
   network. In a network it was seen in, it is mounted only if the same server ID answers;
   in a network it has not been seen in yet, it is not mounted automatically until it has
   been mounted there by hand once.
-- **M-20** The URL reaches `mount volume` as an argument of `osascript`, never as part of
-  the script text (also in the app, A-7).
+- **M-20** The URL reaches `smb-mount`, and in the app `mount volume` (A-7), as an
+  argument, never as part of a script text.
 - **M-17** A mounted share whose name does not resolve is checked (M-3) via its
   remembered address, whatever the network, so a short DNS outage does not unmount it.
 - **M-18** A router MAC that cannot be read (empty ARP cache after a network change) is
